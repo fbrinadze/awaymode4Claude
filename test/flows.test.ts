@@ -117,3 +117,12 @@ test("set_away rejects a past end time and defaults to away_hours", async () => 
   expect(load(dir).awayUntil).toBe(T + 9 * 3_600_000);
   expect(load(dir).cursor).toBe(new Date(T).toISOString());
 });
+
+test("set_away tells Claude when to call it", async () => {
+  await away.handle(JSON.stringify({ jsonrpc: "2.0", id: 999, method: "tools/list" }));
+  const tools = (out.find((m) => m.id === 999)!.result as { tools: { name: string; description: string }[] }).tools;
+  const description = tools.find((t) => t.name === "set_away")!.description;
+  expect(description).toMatch(/stepping away/);
+  expect(description).toMatch(/lunch/);
+  expect(description).toMatch(/back/);
+});

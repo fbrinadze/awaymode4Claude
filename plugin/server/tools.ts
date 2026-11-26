@@ -64,7 +64,8 @@ export function makeTools(c: Ctx): Tool[] {
 
   const setAway: Tool = {
     name: "set_away",
-    description: "Turn away mode on (optionally until an ISO time) or off.",
+    description:
+      'Turn Away Mode on or off. Call it with on=true when the user says they\'re stepping away, going to lunch, in a meeting, heading home or done for the day; pass until as an ISO time worked out from their words ("back at 1:30", "for 30 minutes") or leave it out for the default. Call it with on=false when they say they\'re back.',
     inputSchema: obj({ on: { type: "boolean" }, until: { type: "string" } }, ["on"]),
     async run(a) {
       const now = c.deps.now();
