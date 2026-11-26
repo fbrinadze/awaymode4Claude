@@ -1,0 +1,34 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.19",
+  "version": "0.1.0",
+  "id": "{{BOT_ID}}",
+  "developer": {
+    "name": "Away Mode for Claude Code",
+    "websiteUrl": "https://github.com/fbrinadze/awaymode4Claude",
+    "privacyUrl": "https://github.com/fbrinadze/awaymode4Claude#security",
+    "termsOfUseUrl": "https://github.com/fbrinadze/awaymode4Claude#license"
+  },
+  "name": {
+    "short": "Away Mode",
+    "full": "Away Mode for Claude Code"
+  },
+  "description": {
+    "short": "Answer Claude Code from Teams while you're away.",
+    "full": "Your Claude Code session messages you here when it has a question, needs permission, finishes a task or gets stuck. Your reply goes straight back into the session. Community project, not affiliated with Anthropic or Microsoft."
+  },
+  "icons": {
+    "color": "color.png",
+    "outline": "outline.png"
+  },
+  "accentColor": "#4F6BED",
+  "bots": [
+    {
+      "botId": "{{BOT_ID}}",
+      "scopes": ["personal"],
+      "isNotificationOnly": false,
+      "supportsFiles": false
+    }
+  ],
+  "validDomains": []
+}

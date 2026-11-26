@@ -22,7 +22,7 @@ Away Mode                                        1:20 PM
 - [How it works](#how-it-works)
 - [Requirements](#requirements) and [costs](#costs)
 - [Quick start](#quick-start)
-- [Admin setup](#admin-setup-once-per-company)
+- [One-time setup](#one-time-setup)
 - [Using Away Mode](#using-away-mode)
 - [Configuration](#configuration)
 - [Security](#security)
@@ -53,7 +53,7 @@ Away Mode                                        1:20 PM
 | --- | --- |
 | Claude Code | v2.1.234 or later, signed in with a claude.ai account or a Console API key (channels aren't available on Bedrock, Vertex, or Foundry) |
 | Runtime | [Bun](https://bun.sh) 1.1 or later |
-| Microsoft 365 | A work account with Teams, and an admin who completes the [one-time setup](#admin-setup-once-per-company) |
+| Microsoft 365 | A work account with Teams, and the [one-time setup](#one-time-setup), done by you or your IT admin |
 | Claude Team / Enterprise | An Owner must turn on **Channels** in [Organization settings → Claude Code](https://claude.ai/admin-settings/claude-code) |
 
 ### Costs
@@ -79,7 +79,7 @@ Away Mode itself is free and runs entirely on your computer. There's nothing to 
 
 Choose **user scope** so it works in every project.
 
-**2. Enter your company's values.** Claude Code asks for the **Tenant ID**, **Bot app ID**, and **Bot secret** your admin gives you. The secret is stored in your OS keychain.
+**2. Enter the three values.** Claude Code asks for the **Tenant ID**, **Bot app ID**, and **Bot secret** from the [one-time setup](#one-time-setup). The secret is stored in your OS keychain.
 
 **3. Restart Claude Code with the channel on.**
 
@@ -101,15 +101,15 @@ claude --dangerously-load-development-channels plugin:away-mode@awaymode
 /away-mode:setup
 ```
 
-This signs you in to Microsoft with a short code, installs the Away Mode bot for you, and sends a test message to Teams. Reply `hi` to finish pairing.
+This signs you in to Microsoft with a short code, finds your Away Mode bot chat, and sends a test message to Teams. Reply `hi` to finish pairing.
 
-## Admin setup (once per company)
+## One-time setup
 
-About 10 minutes. Full steps are in [docs/SETUP.md](docs/SETUP.md).
+About 10 minutes, with the Azure CLI. Either you do it for yourself, or an IT admin does it once for a team. Full steps are in [docs/SETUP.md](docs/SETUP.md).
 
-1. **Create the app and bot.** Run `setup/create-app.ps1` (Windows) or `setup/create-app.sh` (macOS/Linux) with the Azure CLI. It creates one Entra app registration and an Azure Bot, and prints the three values your users need.
-2. **Publish the Teams app.** Upload the generated `away-mode-teams.zip` to the Teams admin center (**Manage apps → Upload**) and allow it for your users.
-3. **Allow the channel plugin (optional, recommended).** This lets users start with `--channels` instead of the development flag:
+1. **Create the app and bot.** Run `setup/create-app.ps1` (Windows) or `setup/create-app.sh` (macOS/Linux). It creates one Entra app registration and a free Azure Bot, and prints the three values to enter in Claude Code.
+2. **Add the Teams app.** For yourself: in Teams, **Apps → Manage your apps → Upload a custom app** and pick the generated `away-mode-teams.zip`. For a team: an admin uploads it in the Teams admin center (**Manage apps → Upload**) and each person clicks **Add**.
+3. **Allow the channel plugin (Team/Enterprise, optional).** This lets you start with `--channels` instead of the development flag:
 
 ```json
 {
@@ -120,7 +120,7 @@ About 10 minutes. Full steps are in [docs/SETUP.md](docs/SETUP.md).
 }
 ```
 
-Microsoft permissions requested (delegated, per user): `User.Read`, `Chat.Read`, `TeamsAppInstallation.ReadWriteSelfForUser`. No tenant-wide or application Graph permissions are requested.
+Microsoft permissions requested (delegated, per user, no admin consent needed): `User.Read`, `Chat.Read`, `TeamsAppInstallation.ReadWriteSelfForUser`, plus the `offline_access` sign-in scope so you stay signed in. No tenant-wide or application Graph permissions are requested.
 
 ## Using Away Mode
 
@@ -177,7 +177,9 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 | "blocked by org policy" at startup | An Owner needs to turn on Channels for your Claude organization |
 | "not on the approved allowlist" | Use the development flag, or ask your admin to add Away Mode to `allowedChannelPlugins` |
 | No Teams message | Run `/away-mode:status`. Check that away mode is on and that the session is still running. A sleeping laptop stops the session |
-| Sign-in blocked | Your tenant may block device-code sign-in. Run `/away-mode:setup --browser` |
+| Sign-in blocked | Your tenant may block device-code sign-in. Browser sign-in is planned but not available yet |
+| "isn't added in Teams yet" | Upload `away-mode-teams.zip` in Teams (**Apps → Manage your apps**), then run `/away-mode:setup` again |
+| "sign-in has expired" | Run `/away-mode:setup` again. Microsoft ends idle sign-ins after a while, or when your password changes |
 | Reply not picked up | Make sure you're replying in the **Away Mode** chat, not your own notes |
 
 ## Roadmap

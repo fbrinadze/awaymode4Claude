@@ -1,12 +1,14 @@
 import type { Adapter, Msg } from "./adapters/adapter.ts";
-import { createServer, type Json } from "./mcp.ts";
+import { createServer, type Json, type Tool } from "./mcp.ts";
 import { pollLoop } from "./poll.ts";
 import { route, type Action } from "./route.ts";
 import { isAway, load, save, type State } from "./state.ts";
-import { makeTools } from "./tools.ts";
+import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
   adapter: Adapter;
+  /** More tools that need the shared context (setup). */
+  extraTools?: (ctx: Ctx) => Tool[];
   dir: string;
   project: string;
   hours: number;
@@ -129,7 +131,7 @@ export function createAway(d: Deps) {
 
   const ctx = { deps: d, current, update, say, startPolling };
   const server = createServer(
-    { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: makeTools(ctx), onNotification },
+    { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: [...makeTools(ctx), ...(d.extraTools?.(ctx) ?? [])], onNotification },
     d.write,
   );
 

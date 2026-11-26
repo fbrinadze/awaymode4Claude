@@ -1,11 +1,15 @@
 import { basename } from "node:path";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
+import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
+import { createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
+import type { Net } from "./http.ts";
+import { secretStore } from "./secrets.ts";
+import { setupTool } from "./setup.ts";
 
-// Replaced by the Teams adapter in Phase 2.
 const fail = async (): Promise<never> => {
-  throw new Error("Away Mode isn't set up yet. Run /away-mode:setup.");
+  throw new Error("Away Mode isn't connected to Teams yet. Run /away-mode:setup.");
 };
 const notSetUp: Adapter = { send: fail, poll: fail, me: fail };
 
@@ -14,6 +18,8 @@ const num = (v: string | undefined, fallback: number): number => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
+/** An unset userConfig value may arrive empty or as the literal ${user_config.…} placeholder. */
+const setting = (v: string | undefined): string => (v && !v.includes("${") ? v.trim() : "");
 
 const dir = process.env.CLAUDE_PLUGIN_DATA;
 if (!dir) {
@@ -21,14 +27,35 @@ if (!dir) {
   process.exit(1);
 }
 
+const tenantId = setting(process.env.AWAY_TENANT_ID);
+const botId = setting(process.env.AWAY_BOT_ID);
+const botSecret = setting(process.env.AWAY_BOT_SECRET);
+const net: Net = { fetch: (url, init) => fetch(url, init), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
+const auth =
+  tenantId && botId && botSecret
+    ? createAuth({ tenantId, clientId: botId, botSecret }, net, secretStore(dir), Date.now)
+    : null;
+
+// Swappable so a successful setup switches to Teams without a restart.
+const saved = loadTeams(dir);
+let current: Adapter = auth && saved ? teamsAdapter(dir, saved, auth, net) : notSetUp;
+const adapter: Adapter = {
+  send: (text) => current.send(text),
+  poll: (since) => current.poll(since),
+  me: () => current.me(),
+};
+
 const away = createAway({
-  adapter: notSetUp,
+  adapter,
+  extraTools: (ctx) => [
+    setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
+  ],
   dir,
   project: basename(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
   now: Date.now,
-  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+  sleep: net.sleep,
   write: (line) => void process.stdout.write(line),
 });
 
