@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Secrets and local config: never commit
+.env
+.env.*
+!.env.example
+*.pem
+*.pfx
+.claude/settings.local.json
+
+# Generated
+coverage/
+.mcpb-cache/
+setup/teams-app/*.zip
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+.claude

@@ -1,0 +1,94 @@
+{
+  "name": "away-mode",
+  "displayName": "Away Mode",
+  "version": "0.1.0",
+  "description": "Claude messages you in Microsoft Teams when it needs you while you're away, and your replies go straight back into the session.",
+  "author": {
+    "name": "fbrinadze",
+    "url": "https://github.com/fbrinadze"
+  },
+  "homepage": "https://github.com/fbrinadze/awaymode4Claude",
+  "repository": "https://github.com/fbrinadze/awaymode4Claude",
+  "license": "MIT",
+  "keywords": [
+    "teams",
+    "notifications",
+    "channels",
+    "remote-approval",
+    "away"
+  ],
+  "mcpServers": {
+    "away": {
+      "command": "bun",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/server/index.ts"
+      ],
+      "env": {
+        "AWAY_TENANT_ID": "${user_config.tenant_id}",
+        "AWAY_BOT_ID": "${user_config.bot_app_id}",
+        "AWAY_BOT_SECRET": "${user_config.bot_secret}",
+        "AWAY_HOURS": "${user_config.away_hours}",
+        "AWAY_WAIT_MINUTES": "${user_config.wait_minutes}",
+        "AWAY_END_OF_DAY_ACTION": "${user_config.end_of_day_action}",
+        "AWAY_NEVER_RELAY": "${user_config.never_relay}"
+      }
+    }
+  },
+  "channels": [
+    {
+      "server": "away",
+      "displayName": "Away Mode (Teams)",
+      "userConfig": {
+        "tenant_id": {
+          "type": "string",
+          "title": "Tenant ID",
+          "description": "Your Microsoft 365 tenant ID. Your admin gets this from the setup script.",
+          "required": true
+        },
+        "bot_app_id": {
+          "type": "string",
+          "title": "Bot app ID",
+          "description": "The Away Mode bot's app ID. Your admin gets this from the setup script.",
+          "required": true
+        },
+        "bot_secret": {
+          "type": "string",
+          "title": "Bot secret",
+          "description": "The Away Mode bot's secret. Stored in your OS keychain, never in settings files.",
+          "required": true,
+          "sensitive": true
+        }
+      }
+    }
+  ],
+  "userConfig": {
+    "away_hours": {
+      "type": "number",
+      "title": "Default away length (hours)",
+      "description": "How long away mode lasts when you don't say.",
+      "default": 9,
+      "min": 1,
+      "max": 24
+    },
+    "wait_minutes": {
+      "type": "number",
+      "title": "Wait for a reply (minutes)",
+      "description": "How long Claude waits for your reply before the end-of-day action applies.",
+      "default": 60,
+      "min": 5,
+      "max": 720
+    },
+    "end_of_day_action": {
+      "type": "string",
+      "title": "When there's no reply",
+      "description": "park = pause the task and wait for you. safest = continue with the safest option and tell you.",
+      "default": "park"
+    },
+    "never_relay": {
+      "type": "string",
+      "title": "Terminal-only commands",
+      "description": "Comma-separated command patterns that can only be approved at the terminal, never from Teams.",
+      "default": "rm -rf,git push --force,deploy"
+    }
+  }
+}

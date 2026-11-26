@@ -1,0 +1,207 @@
+# Away Mode for Claude Code
+
+Step away from your desk and keep your Claude Code session moving. When Claude has a question, needs permission, finishes a task, or gets stuck, it messages you in **Microsoft Teams**, and your reply goes straight back into the session.
+
+> **Status: pre-release.** Built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview. Expect changes until v1.0.
+
+```text
+Away Mode                                        1:12 PM
+[order-portal] Question
+Should the export include archived orders?
+Reply 1 = yes, 2 = no, or type an answer.
+
+                                           You   1:20 PM
+                                                       2
+
+Away Mode                                        1:20 PM
+[order-portal] Got it, excluding archived orders.
+```
+
+## Contents
+
+- [How it works](#how-it-works)
+- [Requirements](#requirements) and [costs](#costs)
+- [Quick start](#quick-start)
+- [Admin setup](#admin-setup-once-per-company)
+- [Using Away Mode](#using-away-mode)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+
+## How it works
+
+```text
+ Your computer                               Microsoft 365 (your tenant)
+┌──────────────────────────────┐            ┌─────────────────────────────┐
+│ Claude Code session          │            │ Bot Connector API ──┐       │
+│   ↕ stdio (MCP)              │  1 send    │                     ▼ 2     │
+│ Away Mode channel server ────┼───────────►│ Teams: Away Mode bot chat   │
+│   ↕                          │  4 poll    │                     │ 3 reply│
+│ state.json                   │◄───────────┼── Microsoft Graph ◄─┘       │
+└──────────────────────────────┘            └─────────────────────────────┘
+```
+
+- **Messages come from a bot**, not from you, so they buzz your phone like any other chat.
+- **Every connection starts on your computer.** No open ports, tunnels, or hosted servers.
+- **Zero cost when you're at your desk.** Teams is only checked while away mode is on.
+
+## Requirements
+
+| | |
+| --- | --- |
+| Claude Code | v2.1.234 or later, signed in with a claude.ai account or a Console API key (channels aren't available on Bedrock, Vertex, or Foundry) |
+| Runtime | [Bun](https://bun.sh) 1.1 or later |
+| Microsoft 365 | A work account with Teams, and an admin who completes the [one-time setup](#admin-setup-once-per-company) |
+| Claude Team / Enterprise | An Owner must turn on **Channels** in [Organization settings → Claude Code](https://claude.ai/admin-settings/claude-code) |
+
+### Costs
+
+Away Mode itself is free and runs entirely on your computer. There's nothing to host.
+
+| Item | Cost |
+| --- | --- |
+| Away Mode plugin | Free (MIT) |
+| Azure Bot | Free. Teams is a [standard channel](https://azure.microsoft.com/en-us/pricing/details/bot-services/) with unlimited messages. You need an Azure subscription to create the bot, but Away Mode deploys no web app, so nothing is billed |
+| Entra app registration, Microsoft Graph | Free. Reading your own chat isn't a [metered Teams API](https://learn.microsoft.com/en-us/graph/teams-licenses) |
+| Microsoft Teams | Your existing Microsoft 365 license |
+| Claude usage | Normal usage on your plan or API key. Claude keeps working while you're away, which is the point. Checking Teams uses no tokens; only your replies enter the conversation |
+
+## Quick start
+
+**1. Install the plugin** (at the Claude Code prompt):
+
+```text
+/plugin marketplace add fbrinadze/awaymode4Claude
+/plugin install away-mode@awaymode
+```
+
+Choose **user scope** so it works in every project.
+
+**2. Enter your company's values.** Claude Code asks for the **Tenant ID**, **Bot app ID**, and **Bot secret** your admin gives you. The secret is stored in your OS keychain.
+
+**3. Restart Claude Code with the channel on.**
+
+If your admin has approved Away Mode for your organization:
+
+```bash
+claude --channels plugin:away-mode@awaymode
+```
+
+Otherwise, during the channels research preview:
+
+```bash
+claude --dangerously-load-development-channels plugin:away-mode@awaymode
+```
+
+**4. Sign in once:**
+
+```text
+/away-mode:setup
+```
+
+This signs you in to Microsoft with a short code, installs the Away Mode bot for you, and sends a test message to Teams. Reply `hi` to finish pairing.
+
+## Admin setup (once per company)
+
+About 10 minutes. Full steps are in [docs/SETUP.md](docs/SETUP.md).
+
+1. **Create the app and bot.** Run `setup/create-app.ps1` (Windows) or `setup/create-app.sh` (macOS/Linux) with the Azure CLI. It creates one Entra app registration and an Azure Bot, and prints the three values your users need.
+2. **Publish the Teams app.** Upload the generated `away-mode-teams.zip` to the Teams admin center (**Manage apps → Upload**) and allow it for your users.
+3. **Allow the channel plugin (optional, recommended).** This lets users start with `--channels` instead of the development flag:
+
+```json
+{
+  "channelsEnabled": true,
+  "allowedChannelPlugins": [
+    { "marketplace": "awaymode", "plugin": "away-mode" }
+  ]
+}
+```
+
+Microsoft permissions requested (delegated, per user): `User.Read`, `Chat.Read`, `TeamsAppInstallation.ReadWriteSelfForUser`. No tenant-wide or application Graph permissions are requested.
+
+## Using Away Mode
+
+**Turn it on** by saying so in plain words: *"going to lunch, back at 1:30"*, *"done for the day"*. Or use a command:
+
+| Command | What it does |
+| --- | --- |
+| `/away-mode:away [1h \| until 5pm]` | Turn away mode on. Default length: 9 hours |
+| `/away-mode:back` | Turn it off and list anything you missed |
+| `/away-mode:status` | Show whether you're away and what's waiting |
+| `/away-mode:setup` | Sign in, pair, or re-pair |
+
+Typing anything in the terminal also ends away mode.
+
+**What you'll get in Teams:** questions, permission requests, a short note when a task finishes, and errors.
+
+**How to reply:**
+
+| You type | What happens |
+| --- | --- |
+| `2`, or any text, while a question is open | Answers that question |
+| `yes kfmpq` / `no kfmpq` | Approves or denies that one action. A bare `yes` or `no` works when only one action is waiting |
+| Anything, when nothing is open | Sent to Claude as a new instruction |
+| `#q2 use last month` | Answers an older question |
+| `status` / `back` | Shows progress, or ends away mode from your phone |
+
+**Passwords and keys never go through Teams.** If Claude needs one, the bot tells you to go back to your Claude Code session.
+
+## Configuration
+
+Change these in `/config` at any time.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `away_hours` | `9` | How long away mode lasts when you don't say |
+| `end_of_day_action` | `park` | With no reply after `wait_minutes`: `park` pauses the task, `safest` continues with the safest option and tells you |
+| `wait_minutes` | `60` | How long to wait for a reply before `end_of_day_action` applies |
+| `never_relay` | `rm -rf`, `git push --force`, `deploy` | Commands that can only be approved at the terminal |
+
+## Security
+
+- **Only you get through.** Messages are accepted only from the Microsoft account that paired with the bot. Everything else is dropped.
+- **Approvals are explicit.** Only `yes <id>` or `no <id>` for an open request counts, and each approval covers one action.
+- **Secrets stay out of Teams.** Credential requests are blocked on the way out, and anything that looks like a key is blocked on the way in.
+- **Minimal access.** Three delegated Microsoft permissions, tokens kept in your OS keychain, nothing logged.
+- **Small surface.** No runtime dependencies, no inbound network listener.
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a public issue.
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| "blocked by org policy" at startup | An Owner needs to turn on Channels for your Claude organization |
+| "not on the approved allowlist" | Use the development flag, or ask your admin to add Away Mode to `allowedChannelPlugins` |
+| No Teams message | Run `/away-mode:status`. Check that away mode is on and that the session is still running. A sleeping laptop stops the session |
+| Sign-in blocked | Your tenant may block device-code sign-in. Run `/away-mode:setup --browser` |
+| Reply not picked up | Make sure you're replying in the **Away Mode** chat, not your own notes |
+
+## Roadmap
+
+- [ ] v0.1: Teams, two-way replies, permission relay
+- [ ] Slack (Socket Mode, still no public endpoint)
+- [ ] Several sessions away at once, routed by project
+- [ ] Listing in Anthropic's plugin directory
+
+## Contributing
+
+Issues and PRs are welcome. This project stays small on purpose. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first:
+
+- Zero runtime dependencies. Adding one needs a strong reason.
+- No file over 150 lines, no function over 40.
+- Every change ships with a test.
+
+```bash
+bun install          # dev tools only: TypeScript and Bun types
+bun run check        # typecheck, tests, manifest validation
+```
+
+## License
+
+[MIT](LICENSE)
+
+Away Mode is a community project and isn't affiliated with Anthropic or Microsoft.

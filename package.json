@@ -1,0 +1,16 @@
+{
+  "name": "awaymode4claude",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "validate": "claude plugin validate . --strict && claude plugin validate ./plugin --strict",
+    "check": "bun run typecheck && bun test && bun run validate"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.5",
+    "typescript": "7.0.2"
+  }
+}

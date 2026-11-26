@@ -1,0 +1,15 @@
+{
+  "name": "awaymode",
+  "description": "Away Mode: answer Claude Code from Microsoft Teams while you're away from your desk.",
+  "owner": {
+    "name": "fbrinadze",
+    "url": "https://github.com/fbrinadze"
+  },
+  "plugins": [
+    {
+      "name": "away-mode",
+      "source": "./plugin",
+      "description": "Claude messages you in Microsoft Teams when it needs you while you're away, and your replies go straight back into the session."
+    }
+  ]
+}

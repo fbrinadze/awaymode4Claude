@@ -1,0 +1,4 @@
+# Keep LF everywhere so shell scripts work after a Windows checkout.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.png binary
