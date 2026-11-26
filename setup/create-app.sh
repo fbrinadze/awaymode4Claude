@@ -19,10 +19,19 @@ echo "Tenant: $TENANT"
 
 # 1. One app registration: the bot's identity and the public client you sign in with.
 #    Public client flows on, so device-code sign-in works without the secret.
-APP_ID="$(az ad app create --display-name "$NAME" --sign-in-audience AzureADMyOrg \
-  --is-fallback-public-client true --query appId -o tsv)"
-az ad sp create --id "$APP_ID" >/dev/null
-echo "App registration: $APP_ID"
+#    Safe to re-run: reuses the app (by name) and its service principal.
+APP_ID="$(az ad app list --display-name "$NAME" --query "[0].appId" -o tsv)"
+if [ -n "$APP_ID" ]; then
+  az ad app update --id "$APP_ID" --is-fallback-public-client true >/dev/null
+  echo "App registration: $APP_ID (existing)"
+else
+  APP_ID="$(az ad app create --display-name "$NAME" --sign-in-audience AzureADMyOrg \
+    --is-fallback-public-client true --query appId -o tsv)"
+  echo "App registration: $APP_ID (new)"
+fi
+if [ -z "$(az ad sp list --filter "appId eq '$APP_ID'" --query "[0].id" -o tsv)" ]; then
+  az ad sp create --id "$APP_ID" >/dev/null
+fi
 
 # 2. Delegated Graph permissions, looked up by name. No admin consent: users consent at sign-in.
 GRAPH=00000003-0000-0000-c000-000000000000
@@ -32,20 +41,28 @@ for s in User.Read Chat.Read TeamsAppInstallation.ReadWriteSelfForUser offline_a
 done
 az ad app permission add --id "$APP_ID" --api "$GRAPH" --api-permissions "${IDS[@]}" >/dev/null
 
-# 3. The bot secret: used only to send messages as the bot.
-SECRET="$(az ad app credential reset --id "$APP_ID" --display-name away-mode-bot --years 2 \
+# 3. A new bot secret, added alongside any older ones (--append), used only to send as the bot.
+SECRET="$(az ad app credential reset --id "$APP_ID" --append --display-name away-mode-bot --years 2 \
   --query password -o tsv)"
 
-# 4. A free Azure Bot on that app. Away Mode never receives calls, so the endpoint is a placeholder.
-# `|| true`: head closing the pipe makes tr exit with SIGPIPE, which pipefail would treat as failure.
-SUFFIX="$(LC_ALL=C tr -dc 'a-z' </dev/urandom | head -c 6 || true)"
-BOT="$NAME-$SUFFIX"
+# 4. A free Azure Bot on that app. Reuse the one already bound to this app ID (earlier versions
+#    named it with a random suffix); otherwise create "<name>-<first 8 of app ID>".
+#    Away Mode never receives calls, so the endpoint is a placeholder.
 az provider register --namespace Microsoft.BotService --wait >/dev/null
 az group create -n "$RG" -l "$LOCATION" >/dev/null
-az bot create -g "$RG" -n "$BOT" --app-type SingleTenant --appid "$APP_ID" \
-  --tenant-id "$TENANT" --sku F0 --endpoint "https://example.invalid/away-mode-has-no-endpoint" >/dev/null
-az bot msteams create -g "$RG" -n "$BOT" >/dev/null
-echo "Azure Bot: $BOT (F0, free)"
+BOT=""
+for b in $(az resource list -g "$RG" --resource-type Microsoft.BotService/botServices --query "[].name" -o tsv); do
+  if [ "$(az bot show -g "$RG" -n "$b" --query properties.msaAppId -o tsv)" = "$APP_ID" ]; then BOT="$b"; break; fi
+done
+if [ -n "$BOT" ]; then
+  echo "Azure Bot: $BOT (existing)"
+else
+  BOT="$NAME-${APP_ID:0:8}"
+  az bot create -g "$RG" -n "$BOT" --app-type SingleTenant --appid "$APP_ID" \
+    --tenant-id "$TENANT" --sku F0 --endpoint "https://example.invalid/away-mode-has-no-endpoint" >/dev/null
+  echo "Azure Bot: $BOT (new, F0, free)"
+fi
+az bot msteams show -g "$RG" -n "$BOT" >/dev/null 2>&1 || az bot msteams create -g "$RG" -n "$BOT" >/dev/null
 
 # 5. The Teams app package: manifest with the bot ID, plus the two icons, zipped flat.
 STAGE="$(mktemp -d)"
