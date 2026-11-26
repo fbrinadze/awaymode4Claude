@@ -253,11 +253,11 @@ Each phase ends with a check that must pass before the next starts.
 
 ### Phase 1: Core channel, platform-neutral
 
-- [ ] `mcp.ts`: stdio JSON-RPC, `initialize`, `tools/list`, `tools/call`, channel notifications
-- [ ] `index.ts`: channel + permission capabilities, `ask` and `notify`, reply routing
-- [ ] `state.ts` and `poll.ts` with backoff (5 s after a message, easing to 60 s when quiet)
-- [ ] Sender gate and verdict parsing, with tests for every reply rule
-- [ ] Fake adapter for tests
+- [x] `mcp.ts`: stdio JSON-RPC, `initialize`, `tools/list`, `tools/call`, channel notifications
+- [x] `index.ts`: channel + permission capabilities, `ask` and `notify`, reply routing
+- [x] `state.ts` and `poll.ts` with backoff (5 s after a message, easing to 60 s when quiet)
+- [x] Sender gate and verdict parsing, with tests for every reply rule
+- [x] Fake adapter for tests
 
 **Check:** `bun test` covers question, permission, finished and error flows end to end.
 
