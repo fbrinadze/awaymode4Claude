@@ -48,7 +48,12 @@ export function route(msg: Msg, s: State): Action {
   if (!s.me || msg.from !== s.me) return { kind: "drop" };
   const text = msg.text.trim();
   if (!text) return { kind: "drop" };
-  // TODO(human): pick the precedence. Combine parseVerdict, parseTargeted,
-  // parseCommand and answerLatest, falling back to { kind: "instruction", text }.
-  return { kind: "instruction", text };
+  // Verdicts first (PLAN.md). Commands beat plain answers so "back" always works from a phone;
+  // the cost is that a bare "back" or "status" can't answer a question (use "#qN back").
+  return (
+    parseVerdict(text, s) ??
+    parseTargeted(text, s) ??
+    parseCommand(text) ??
+    answerLatest(text, s) ?? { kind: "instruction", text }
+  );
 }

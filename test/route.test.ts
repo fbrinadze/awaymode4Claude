@@ -67,6 +67,12 @@ test("status and back are commands when nothing is open", () => {
   expect(route(msg("BACK"), state())).toEqual({ kind: "back" });
 });
 
+test("back still ends away mode with a question open; #qN answers it literally", () => {
+  const s = state({ questions: [q("q1")] });
+  expect(route(msg("back"), s)).toEqual({ kind: "back" });
+  expect(route(msg("#q1 back"), s)).toEqual({ kind: "answer", questionId: "q1", text: "back" });
+});
+
 test("anything else with nothing open is a new instruction", () => {
   expect(route(msg("also update the README"), state())).toEqual({
     kind: "instruction",
