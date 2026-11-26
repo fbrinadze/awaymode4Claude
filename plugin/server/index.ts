@@ -1,4 +1,5 @@
-import { basename } from "node:path";
+import { homedir } from "node:os";
+import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
@@ -18,6 +19,8 @@ const num = (v: string | undefined, fallback: number): number => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
+/** The folder name to show in Teams; none when Claude Code was started in the home folder. */
+const projectName = (dir: string): string => (resolve(dir) === resolve(homedir()) ? "" : basename(dir));
 /** An unset userConfig value may arrive empty or as the literal ${user_config.…} placeholder. */
 const setting = (v: string | undefined): string => (v && !v.includes("${") ? v.trim() : "");
 
@@ -51,7 +54,7 @@ const away = createAway({
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
   ],
   dir,
-  project: basename(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
+  project: projectName(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
   now: Date.now,
