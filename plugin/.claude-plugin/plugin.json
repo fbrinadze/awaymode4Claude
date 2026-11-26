@@ -44,31 +44,26 @@
   "channels": [
     {
       "server": "away",
-      "displayName": "Away Mode (Teams)",
-      "userConfig": {
-        "tenant_id": {
-          "type": "string",
-          "title": "Tenant ID",
-          "description": "Your Microsoft 365 tenant ID. Your admin gets this from the setup script.",
-          "required": true
-        },
-        "bot_app_id": {
-          "type": "string",
-          "title": "Bot app ID",
-          "description": "The Away Mode bot's app ID. Your admin gets this from the setup script.",
-          "required": true
-        },
-        "bot_secret": {
-          "type": "string",
-          "title": "Bot secret",
-          "description": "The Away Mode bot's secret. Stored in your OS keychain, never in settings files.",
-          "required": true,
-          "sensitive": true
-        }
-      }
+      "displayName": "Away Mode (Teams)"
     }
   ],
   "userConfig": {
+    "tenant_id": {
+      "type": "string",
+      "title": "Tenant ID",
+      "description": "Your Microsoft 365 tenant ID. setup\\install.ps1 fills this in; otherwise it's printed by setup/create-app."
+    },
+    "bot_app_id": {
+      "type": "string",
+      "title": "Bot app ID",
+      "description": "The Away Mode bot's app ID. setup\\install.ps1 fills this in; otherwise it's printed by setup/create-app."
+    },
+    "bot_secret": {
+      "type": "string",
+      "title": "Bot secret",
+      "description": "The Away Mode bot's secret. setup\\install.ps1 fills this in without showing it. Stored in your OS keychain, never in settings files.",
+      "sensitive": true
+    },
     "away_hours": {
       "type": "number",
       "title": "Default away length (hours)",
