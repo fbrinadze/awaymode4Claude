@@ -133,6 +133,23 @@
 - [ ] **Step 7: Verify syntax.** The PowerShell parser must report no errors. Grep the script for `Write-Host.*Secret` and expect no matches.
 - [ ] **Step 8: Commit** with `feat: one-command Windows installer`.
 
+### Task 6: Messages say Claude (added 2026-11-26 at user request)
+
+**Files:**
+- Modify: `plugin/server/away.ts` (the `say` prefix), `plugin/server/index.ts` (the project label)
+- Modify: `setup/teams-app/color.png`, `setup/teams-app/outline.png` (recolored, same crescent moon), `setup/teams-app/manifest.json` (`accentColor`)
+- Test: `test/flows.test.ts`
+
+**Interfaces:**
+- `Deps.project` becomes `""` when Claude Code was started in the user's home folder. `say` prefixes `[Claude] ` when the project is empty, otherwise `[Claude · <project>] `.
+
+- [ ] **Step 1: Write the failing tests.** Update the existing expectations from `[order-portal]` to `[Claude · order-portal]`. Add `"a session with no project just says Claude"`: build the harness with `project: ""`, run `notify` info `"hi"`, and expect `"[Claude] Update\nhi"`.
+- [ ] **Step 2: Run** `bun test test/flows.test.ts`. Expect FAIL.
+- [ ] **Step 3: Implement the `say` prefix.** In `index.ts`, the project is `""` when `CLAUDE_PROJECT_DIR ?? cwd` resolves to `os.homedir()`.
+- [ ] **Step 4: Recolor the icons** with the throwaway generator: terracotta background `#D97757` with a cream moon `#F5F0E8`; the outline icon stays white on transparent. Set `accentColor` to `#D97757`. The design stays our own crescent moon, not the Claude logo.
+- [ ] **Step 5: Run** `bun test`. Expect PASS.
+- [ ] **Step 6: Commit** with `feat: messages say Claude; warmer icon`.
+
 ### Task 5: Docs
 
 **Files:**

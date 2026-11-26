@@ -6,7 +6,7 @@ Step away from your desk and keep your Claude Code session moving. When Claude h
 
 ```text
 Away Mode                                        1:12 PM
-[order-portal] Question
+[Claude · order-portal] Question
 Should the export include archived orders?
 Reply 1 = yes, 2 = no, or type an answer.
 
@@ -14,7 +14,7 @@ Reply 1 = yes, 2 = no, or type an answer.
                                                        2
 
 Away Mode                                        1:20 PM
-[order-portal] Got it, excluding archived orders.
+[Claude · order-portal] Got it, excluding archived orders.
 ```
 
 ## Contents
@@ -70,46 +70,40 @@ Away Mode itself is free and runs entirely on your computer. There's nothing to 
 
 ## Quick start
 
-**1. Install the plugin** (at the Claude Code prompt):
+**Windows, as a Teams admin (or for yourself if you are one):**
 
-```text
-/plugin marketplace add fbrinadze/awaymode4Claude
-/plugin install away-mode@awaymode
+**1. Run the installer** from a copy of this repo, in PowerShell:
+
+```powershell
+git clone https://github.com/fbrinadze/awaymode4Claude.git
+cd awaymode4Claude
+powershell -ExecutionPolicy Bypass -File setup\install.ps1
 ```
 
-Choose **user scope** so it works in every project.
+It checks for the Azure CLI, Bun and Claude Code (installing Bun if needed) and creates or reuses the Azure app and free bot. It then puts the Away Mode app in your Teams, installs the plugin, and saves its settings. The bot secret goes straight into your OS keychain and is never shown. It's safe to run again.
 
-**2. Enter the three values.** Claude Code asks for the **Tenant ID**, **Bot app ID**, and **Bot secret** from the [one-time setup](#one-time-setup). The secret is stored in your OS keychain.
-
-**3. Restart Claude Code with the channel on.**
-
-If your admin has approved Away Mode for your organization:
-
-```bash
-claude --channels plugin:away-mode@awaymode
-```
-
-Otherwise, during the channels research preview:
+**2. Open a new terminal and start Claude Code with the channel on:**
 
 ```bash
 claude --dangerously-load-development-channels plugin:away-mode@awaymode
 ```
 
-**4. Sign in once:**
+If your organization has [approved the plugin](#one-time-setup), `claude --channels plugin:away-mode@awaymode` works too.
 
-```text
-/away-mode:setup
-```
+**3. Pair once:** run `/away-mode:setup`. Sign in with the short code it shows, then reply `hi` to Away Mode in Teams.
 
-This signs you in to Microsoft with a short code, finds your Away Mode bot chat, and sends a test message to Teams. Reply `hi` to finish pairing.
+**4. Step away:** say so in plain words, for example *"going to lunch, back at 1:30"*.
+
+Not a Teams admin, or on macOS/Linux? Use the [manual setup](#one-time-setup).
 
 ## One-time setup
 
-About 10 minutes, with the Azure CLI. Either you do it for yourself, or an IT admin does it once for a team. Full steps are in [docs/SETUP.md](docs/SETUP.md).
+The installer above does all of this on Windows. To do it by hand (about 10 minutes, with the Azure CLI), or on macOS/Linux, follow [docs/SETUP.md](docs/SETUP.md):
 
-1. **Create the app and bot.** Run `setup/create-app.ps1` (Windows) or `setup/create-app.sh` (macOS/Linux). It creates one Entra app registration and a free Azure Bot, and prints the three values to enter in Claude Code.
-2. **Add the Teams app.** For yourself: in Teams, **Apps → Manage your apps → Upload a custom app** and pick the generated `away-mode-teams.zip`. For a team: an admin uploads it in the Teams admin center (**Manage apps → Upload**) and each person clicks **Add**.
-3. **Allow the channel plugin (Team/Enterprise, optional).** This lets you start with `--channels` instead of the development flag:
+1. **Create the app and bot.** Run `setup/create-app.ps1` (Windows) or `setup/create-app.sh` (macOS/Linux). It creates or reuses one Entra app registration and a free Azure Bot, and prints the three values.
+2. **Add the Teams app.** If your Teams allows it: **Apps → Manage your apps → Upload a custom app** and pick `away-mode-teams.zip`. Many organizations turn that off. In that case an admin publishes it, as described in [docs/SETUP.md](docs/SETUP.md#tenant-notes).
+3. **Install the plugin.** Run `/plugin marketplace add fbrinadze/awaymode4Claude`, then `/plugin install away-mode@awaymode`. Enter the three values under `/plugin` → Away Mode.
+4. **Allow the channel plugin (Team/Enterprise, optional).** This lets you start with `--channels` instead of the development flag:
 
 ```json
 {
