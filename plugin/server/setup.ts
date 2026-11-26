@@ -1,3 +1,5 @@
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Adapter } from "./adapters/adapter.ts";
 import { saveTeams, teamsAdapter, type TeamsConfig } from "./adapters/teams.ts";
 import type { Auth, DeviceCode } from "./auth.ts";
@@ -24,21 +26,42 @@ const NOT_CONFIGURED =
 const NOT_ADDED =
   "The Away Mode app isn't added in Teams yet. In Teams open Apps > Manage your apps > Upload a custom app and pick away-mode-teams.zip (or Add it from your organization's apps). Then call setup with step \"finish\" again.";
 
+// ponytail: the device code is a short-lived credential (about 15 min). It's kept 0600 in plugin
+// data only so a closed terminal doesn't lose pairing, and it's deleted the moment it's read.
+const deviceFile = (dir: string) => join(dir, "device.json");
+
+function savePending(dir: string, dc: DeviceCode): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(deviceFile(dir), JSON.stringify(dc), { mode: 0o600 });
+}
+
+/** The saved code, if still valid. Always removes the file: a code is only ever used once. */
+function takePending(dir: string, now: number): DeviceCode | null {
+  try {
+    const dc = JSON.parse(readFileSync(deviceFile(dir), "utf8")) as DeviceCode;
+    return dc.expiresAt > now ? dc : null;
+  } catch {
+    return null;
+  } finally {
+    rmSync(deviceFile(dir), { force: true });
+  }
+}
+
 export function setupTool(d: SetupDeps): Tool {
   let pending: DeviceCode | null = null;
 
   async function start(auth: Auth): Promise<string> {
     pending = await auth.startDeviceCode();
+    savePending(d.dir, pending);
     return `Show the user this exactly: ${pending.message}\nWhen they say they've signed in, call setup with step "finish".`;
   }
 
-  /** Signs in (if a code is pending), finds the bot chat, switches to Teams and sends a test message. */
+  /** Signs in (if a code is pending, here or saved by an earlier session), finds the bot chat, switches to Teams and sends a test message. */
   async function finish(auth: Auth): Promise<string> {
-    if (pending) {
-      const dc = pending;
-      pending = null;
-      await auth.finishDeviceCode(dc);
-    }
+    const saved = takePending(d.dir, d.ctx.deps.now());
+    const dc = pending ?? saved;
+    pending = null;
+    if (dc) await auth.finishDeviceCode(dc);
     const token = await auth.graphToken();
     const me = String((await call(d.net, `${GRAPH}/me?$select=id`, bearer(token))).id);
     const apps = await call(d.net, `${GRAPH}/users/${me}/teamwork/installedApps?$expand=teamsApp`, bearer(token));
