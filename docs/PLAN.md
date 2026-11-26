@@ -15,7 +15,7 @@ It's built on Claude Code [channels](https://code.claude.com/docs/en/channels): 
 | Reply flow | Two-way: answer questions and approve or deny actions from Teams. There is no send-only mode |
 | Triggers | Claude has a question · needs permission · task finished · error or stuck |
 | Platforms | Teams first; Slack later, as one new adapter file |
-| Audience | Public repo; anyone can install it with their own Microsoft tenant |
+| Audience | Public repo; anyone can install it with their own Microsoft tenant. Set up by one person for their own session, or by an IT admin once for a team |
 | Plugin / marketplace names | `away-mode` / `awaymode` (names starting with `claude-` are reserved by Anthropic) |
 | Runtime | Bun, TypeScript, no build step, **zero runtime dependencies** |
 | Repo | [github.com/fbrinadze/awaymode4Claude](https://github.com/fbrinadze/awaymode4Claude) |
@@ -113,8 +113,8 @@ The bot matters because Teams doesn't notify you about messages you send yoursel
 
 ### Setup
 
-- **Admin, once per company:** one Entra app registration, an Azure Bot on it, and the Teams app package uploaded to the org catalog. `setup/create-app.ps1` / `.sh` does most of it.
-- **Each user, once:** device-code sign-in from the `setup` skill. It installs the bot for the user and finds the bot chat.
+- **Once, by the user or an IT admin:** one Entra app registration, an Azure Bot on it, and the Teams app package. `setup/create-app.ps1` / `.sh` does it. The user uploads the package as a custom app in Teams, or an admin publishes it to the org catalog and users click **Add**.
+- **Each user, once:** device-code sign-in from the `setup` skill. It finds the bot chat among the user's installed apps (it never installs anything, so no catalog permission is needed).
 
 A Teams Workflows webhook would avoid the admin step, but it can only send, never receive, so it's out.
 
@@ -124,7 +124,8 @@ A Teams Workflows webhook would avoid the admin step, but it can only send, neve
 | --- | --- | --- |
 | `User.Read` | Delegated | Get your own object ID so the bot can find you |
 | `Chat.Read` | Delegated | Read your replies in the bot chat |
-| `TeamsAppInstallation.ReadWriteSelfForUser` | Delegated | Install the bot for yourself and find its chat during setup |
+| `TeamsAppInstallation.ReadWriteSelfForUser` | Delegated | Find the bot chat among your installed apps during setup |
+| `offline_access` | Sign-in scope | A refresh token, so you stay signed in. Not a Graph permission |
 | Bot credentials | Application (bot only) | Send messages as the bot. No tenant-wide Graph access |
 
 ### Alternatives rejected
@@ -263,9 +264,10 @@ Each phase ends with a check that must pass before the next starts.
 
 ### Phase 2: Teams adapter and setup
 
-- [ ] `adapters/teams.ts` and `auth.ts`
-- [ ] `setup/create-app` scripts and Teams app manifest template
-- [ ] `setup` skill: sign-in, self-install the bot, store the chat ID, test message
+- [x] `adapters/teams.ts` and `auth.ts` (plus `http.ts`, and `secrets.ts` using `Bun.secrets` with a 0600-file fallback)
+- [x] `setup/create-app` scripts and Teams app manifest template
+- [x] `setup` skill: sign-in, find the bot chat, store the chat ID, test message, pair on "hi"
+- [ ] Live check below (needs a real tenant). It also answers Phase 0's open question about the unreachable bot endpoint
 
 **Check:** a real round trip from a phone works for a question, a permission and a finished task.
 
