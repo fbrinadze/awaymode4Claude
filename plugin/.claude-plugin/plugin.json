@@ -17,6 +17,13 @@
     "remote-approval",
     "away"
   ],
+  "network": {
+    "hosts": [
+      "login.microsoftonline.com",
+      "graph.microsoft.com",
+      "smba.trafficmanager.net"
+    ]
+  },
   "mcpServers": {
     "away": {
       "command": "bun",
