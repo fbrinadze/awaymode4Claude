@@ -2,6 +2,11 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.1] - 2026-11-27
+
+### Fixed
+- Away Mode no longer needs Bun on the PATH Claude Code started with. The server and hooks run a new **Bun path** setting (default `bun`), which `setup\install.ps1` fills with Bun's full path. This fixes the server failing to start after the installer added Bun, when Windows Terminal or VS Code still had the old PATH (PR #11).
+
 ## [0.3.0] - 2026-11-26
 
 ### Removed
