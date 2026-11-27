@@ -1,9 +1,10 @@
-import type { Adapter, Msg } from "./adapters/adapter.ts";
+import type { Adapter } from "./adapters/adapter.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { pollLoop } from "./poll.ts";
+import { drainInbox, pollCycle } from "./poller.ts";
 import { createRelay } from "./relay.ts";
 import { HELD_BACK_TEXT, looksLikeSecret, redact } from "./sensitive.ts";
-import { route, type Action } from "./route.ts";
+import type { Action } from "./route.ts";
 import { isAway, load, save, type State } from "./state.ts";
 import { type Ctx, makeTools, statusText } from "./tools.ts";
 
@@ -12,6 +13,8 @@ export interface Deps {
   /** More tools that need the shared context (setup). */
   extraTools?: (ctx: Ctx) => Tool[];
   dir: string;
+  /** This server's project key (projectKey of its folder); "default" in tests. */
+  key?: string;
   project: string;
   hours: number;
   waitMinutes: number;
@@ -37,11 +40,12 @@ const INSTRUCTIONS = [
 
 export function createAway(d: Deps) {
   let polling = false;
+  const key = d.key ?? "default";
 
   // ponytail: pending permissions expire after wait_minutes because Claude Code never says
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
   function current(): State {
-    const s = load(d.dir);
+    const s = load(d.dir, key);
     const cutoff = d.now() - d.waitMinutes * 60_000;
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
@@ -51,7 +55,7 @@ export function createAway(d: Deps) {
   function update(fn: (s: State) => void): State {
     const s = current();
     fn(s);
-    save(d.dir, s);
+    save(d.dir, s, key);
     return s;
   }
 
@@ -69,22 +73,12 @@ export function createAway(d: Deps) {
     });
   }
 
-  /** Timeouts first (so a late answer can't hit a closed question), then queued alerts, then replies. Cursor moves before handling: a message is acted on at most once. */
+  /** Timeouts first (so a late answer can't hit a closed question), then queued alerts, then actions other servers queued for us, then the (leased) poll. */
   async function pollOnce(): Promise<number> {
     await relay.sweepTimeouts();
     await relay.drainOutbox();
-    const msgs = await d.adapter.poll(current().cursor);
-    for (const m of msgs) {
-      update((s) => {
-        s.cursor = m.at;
-      });
-      await onMsg(m);
-    }
-    return msgs.length;
-  }
-
-  async function onMsg(m: Msg): Promise<void> {
-    await act(route(m, current()));
+    for (const a of drainInbox(d.dir, key, d.now())) await act(a);
+    return pollCycle({ dir: d.dir, key, now: d.now, adapter: d.adapter, deliverLocal: (r) => act(r.action) });
   }
 
   async function act(a: Action): Promise<void> {

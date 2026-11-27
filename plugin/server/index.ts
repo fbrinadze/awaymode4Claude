@@ -61,6 +61,7 @@ const away = createAway({
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
   ],
   dir,
+  key: projectKey(projectDir),
   project: tag,
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
