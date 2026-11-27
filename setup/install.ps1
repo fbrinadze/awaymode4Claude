@@ -104,10 +104,18 @@ try {
 # 5. Claude Code plugin: install, then save the three values. The secret goes over stdin only,
 #    never on a command line, and Claude Code keeps it in your OS keychain.
 Step "Installing the Claude Code plugin"
-& claude plugin marketplace add fbrinadze/awaymode4Claude
-if ($LASTEXITCODE -ne 0) { throw "Couldn't add the Away Mode marketplace to Claude Code." }
+# On a re-run, refresh the marketplace and the plugin first: configure needs the current
+# plugin.json, which declares the three settings at plugin level.
+if ((& claude plugin marketplace list | Out-String) -match "awaymode") {
+  & claude plugin marketplace update awaymode
+} else {
+  & claude plugin marketplace add fbrinadze/awaymode4Claude
+}
+if ($LASTEXITCODE -ne 0) { throw "Couldn't add or refresh the Away Mode marketplace in Claude Code." }
 & claude plugin install $plugin
-if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to save the settings anyway." }
+if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to update it instead." }
+& claude plugin update $plugin
+if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
 @{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret } |
   ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }

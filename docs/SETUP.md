@@ -40,6 +40,8 @@ It's safe to re-run. Each run adds one new bot secret; older ones keep working u
 
 If the Teams step fails, for example because you aren't a Teams admin, the installer prints the exact steps to send to your admin and still sets up the plugin.
 
+**Upgrading from an earlier Away Mode:** the Tenant ID, Bot app ID and Bot secret moved from the channel settings to the plugin settings. Re-run `install.ps1`, which refreshes the plugin and saves them, or re-enter them under `/plugin` → Away Mode.
+
 ## Then: pair
 
 1. **Open a new terminal**, so it picks up Bun, and run `claude --dangerously-load-development-channels plugin:away-mode@awaymode`.

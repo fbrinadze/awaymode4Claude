@@ -43,7 +43,8 @@ Write-Host "Tenant: $tenant"
 
 # 1. One app registration: the bot's identity and the public client you sign in with.
 #    Public client flows on, so device-code sign-in works without the secret.
-$appId = Invoke-Az ad app list --display-name $Name --query "[0].appId" -o tsv
+# Exact name match: --display-name is a prefix match and could pick "away-mode-dev" or similar.
+$appId = Invoke-Az ad app list --filter "displayName eq '$Name'" --query "[0].appId" -o tsv
 if ($appId) {
   Invoke-Az ad app update --id $appId --is-fallback-public-client true | Out-Null
   Write-Host "App registration: $appId (existing)"

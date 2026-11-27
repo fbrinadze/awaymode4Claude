@@ -20,7 +20,8 @@ echo "Tenant: $TENANT"
 # 1. One app registration: the bot's identity and the public client you sign in with.
 #    Public client flows on, so device-code sign-in works without the secret.
 #    Safe to re-run: reuses the app (by name) and its service principal.
-APP_ID="$(az ad app list --display-name "$NAME" --query "[0].appId" -o tsv)"
+# Exact name match: --display-name is a prefix match and could pick "away-mode-dev" or similar.
+APP_ID="$(az ad app list --filter "displayName eq '$NAME'" --query "[0].appId" -o tsv)"
 if [ -n "$APP_ID" ]; then
   az ad app update --id "$APP_ID" --is-fallback-public-client true >/dev/null
   echo "App registration: $APP_ID (existing)"
