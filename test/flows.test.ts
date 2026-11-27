@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAway } from "../plugin/server/away.ts";
 import type { Json } from "../plugin/server/mcp.ts";
+import { SENSITIVE_TEXT } from "../plugin/server/sensitive.ts";
 import { fresh, load, save } from "../plugin/server/state.ts";
 import { FakeAdapter } from "./fake-adapter.ts";
 
@@ -162,4 +163,40 @@ test("a session with no project just says Claude", async () => {
   await call("set_away", { on: true });
   await call("notify", { type: "info", text: "hi" });
   expect(fake.sent).toEqual(["[Claude] Update\nhi"]);
+});
+
+test("ask and notify record that Claude sent an update; acks don't", async () => {
+  await tool("set_away", { on: true });
+  await tool("notify", { type: "info", text: "working" });
+  expect(load(dir).lastSentAt).toBe(T);
+  save(dir, { ...load(dir), lastSentAt: 0 });
+  await reply("also update the README"); // the server answers "Got it, passing that to Claude."
+  expect(load(dir).lastSentAt).toBe(0);
+});
+
+test("set_away records when away mode started", async () => {
+  await tool("set_away", { on: true });
+  expect(load(dir).awayStartedAt).toBe(T);
+});
+
+test("status lists open questions", async () => {
+  await tool("set_away", { on: true });
+  await tool("ask", { question: "Include archived?" });
+  const text = JSON.stringify(await tool("status"));
+  expect(text).toContain("q1");
+  expect(text).toContain("Include archived?");
+});
+
+test("ask for a secret sends the sensitive notice instead", async () => {
+  await tool("set_away", { on: true });
+  const r = await tool("ask", { question: "What's the database password?" });
+  expect(JSON.stringify(r)).toContain("can't be shared over Teams");
+  expect(fake.sent).toEqual([`[Claude · order-portal] ${SENSITIVE_TEXT}`]);
+  expect(load(dir).questions).toEqual([]);
+});
+
+test("notify sensitive sends the fixed text", async () => {
+  await tool("set_away", { on: true });
+  await tool("notify", { type: "sensitive", text: "need the deploy key" });
+  expect(fake.sent).toEqual([`[Claude · order-portal] ${SENSITIVE_TEXT}`]);
 });

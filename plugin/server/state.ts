@@ -24,6 +24,14 @@ export interface State {
   nextQ: number;
   questions: Question[];
   permissions: Permission[];
+  /** Epoch ms Claude last reached the user via ask/notify (server acks don't count). */
+  lastSentAt: number;
+  /** Epoch ms of the last Stop the hook let through. */
+  lastStopAt: number;
+  /** Epoch ms away mode was last turned on. */
+  awayStartedAt: number;
+  /** Messages queued by hooks (which can't send) for the server to deliver on its next poll. */
+  outbox: { type: string; text: string }[];
 }
 
 export const fresh = (): State => ({
@@ -33,6 +41,10 @@ export const fresh = (): State => ({
   nextQ: 1,
   questions: [],
   permissions: [],
+  lastSentAt: 0,
+  lastStopAt: 0,
+  awayStartedAt: 0,
+  outbox: [],
 });
 
 export const isAway = (s: State, now: number): boolean => s.awayUntil > now;
