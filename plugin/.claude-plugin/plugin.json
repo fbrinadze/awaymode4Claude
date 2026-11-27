@@ -21,7 +21,10 @@
     "hosts": [
       "login.microsoftonline.com",
       "graph.microsoft.com",
-      "smba.trafficmanager.net"
+      "smba.trafficmanager.net",
+      "slack.com",
+      "wss-primary.slack.com",
+      "wss-backup.slack.com"
     ]
   },
   "mcpServers": {
@@ -34,6 +37,8 @@
         "AWAY_TENANT_ID": "${user_config.tenant_id}",
         "AWAY_BOT_ID": "${user_config.bot_app_id}",
         "AWAY_BOT_SECRET": "${user_config.bot_secret}",
+        "AWAY_SLACK_BOT_TOKEN": "${user_config.slack_bot_token}",
+        "AWAY_SLACK_APP_TOKEN": "${user_config.slack_app_token}",
         "AWAY_HOURS": "${user_config.away_hours}",
         "AWAY_WAIT_MINUTES": "${user_config.wait_minutes}",
         "AWAY_END_OF_DAY_ACTION": "${user_config.end_of_day_action}",
@@ -62,6 +67,18 @@
       "type": "string",
       "title": "Bot secret",
       "description": "The Away Mode bot's secret. setup\\install.ps1 fills this in without showing it. Stored in your OS keychain, never in settings files.",
+      "sensitive": true
+    },
+    "slack_bot_token": {
+      "type": "string",
+      "title": "Slack bot token (optional)",
+      "description": "Only for Slack instead of Teams. The xoxb- Bot User OAuth Token from your Away Mode Slack app. Stored in your OS keychain.",
+      "sensitive": true
+    },
+    "slack_app_token": {
+      "type": "string",
+      "title": "Slack app-level token (optional)",
+      "description": "Only for Slack instead of Teams. The xapp- app-level token with the connections:write scope. Stored in your OS keychain.",
       "sensitive": true
     },
     "away_hours": {

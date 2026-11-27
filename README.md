@@ -164,6 +164,10 @@ Change these in `/config` at any time.
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a public issue.
 
+## Slack
+
+Away Mode can use Slack instead of Teams: create the app from `setup/slack-app/manifest.yaml`, store the two Slack tokens, and pair with a 6-digit code. See [docs/SETUP-SLACK.md](docs/SETUP-SLACK.md). **Not live-tested yet.**
+
 ## Troubleshooting
 
 | Problem | Fix |

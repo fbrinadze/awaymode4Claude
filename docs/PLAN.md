@@ -294,10 +294,10 @@ Each phase ends with a check that must pass before the next starts.
 
 ### Phase 5: Slack
 
-- [ ] `adapters/slack.ts` using Socket Mode (outgoing websocket, still no public endpoint)
-- [ ] Slack app manifest in `setup/`
+- [x] `adapters/slack.ts` using Socket Mode (outgoing websocket, still no public endpoint)
+- [x] Slack app manifest in `setup/` (not live-tested yet: no workspace)
 
-**Check:** Phase 1 tests pass against the Slack adapter, and nothing outside `adapters/` and config changed.
+**Check:** Phase 1 tests pass against the Slack adapter, and nothing outside `adapters/` and config changed. Result: the Phase 1 flows pass through the Slack adapter (`test/slack-flows.test.ts`) and the `Adapter` interface is unchanged. Outside `adapters/`, Slack also needed startup wiring in `index.ts` and code pairing in `setup-slack.ts`.
 
 ## Risks and open questions
 
