@@ -75,6 +75,11 @@ test("start → finish: signs in, finds the bot chat, pairs and sends a test mes
   expect(h.sent[0]?.text).toContain("Reply hi to finish pairing");
 });
 
+test("finish finds an uploaded (sideloaded) app, whose manifest ID is in id, not externalId", async () => {
+  const r = await harness(fakeAuth, [{ id: "inst-1", teamsApp: { id: "app", externalId: null } }]).setup("finish");
+  expect(r.isError).toBe(false);
+});
+
 test("finish explains how to add the app when it isn't in Teams yet", async () => {
   const r = await harness(fakeAuth, []).setup("finish");
   expect(r.isError).toBe(true);

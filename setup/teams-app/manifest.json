@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "id": "{{BOT_ID}}",
   "developer": {
     "name": "Away Mode for Claude Code",
@@ -30,5 +30,8 @@
       "supportsFiles": false
     }
   ],
-  "validDomains": []
+  "validDomains": [],
+  "webApplicationInfo": {
+    "id": "{{BOT_ID}}"
+  }
 }
