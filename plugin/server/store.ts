@@ -30,6 +30,8 @@ export interface ProjectState {
   inbox: InboxItem[];
   lastSentAt: number;
   lastStopAt: number;
+  /** Ended by expiry or handover elsewhere: the owner still has to tell its Claude (ownerInstance is kept until then). */
+  ended?: "expired" | "handover";
 }
 export interface Store {
   version: 2;
@@ -68,6 +70,7 @@ function project(v: unknown): ProjectState {
     awayUntil: num(p.awayUntil), awayStartedAt: num(p.awayStartedAt), snoozeUntil: num(p.snoozeUntil),
     questions: arr(p.questions, hasId), permissions: arr(p.permissions, hasId), outbox: arr(p.outbox),
     recap: arr(p.recap), inbox: arr(p.inbox), lastSentAt: num(p.lastSentAt), lastStopAt: num(p.lastStopAt),
+    ended: p.ended === "expired" || p.ended === "handover" ? p.ended : undefined,
   };
 }
 
