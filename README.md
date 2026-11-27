@@ -270,6 +270,7 @@ Start with `/away-mode:doctor`. It checks Bun, the plugin, your settings, sign-i
 
 Next:
 
+- [ ] Vacation mode: away for days, not hours
 - [ ] Listing in Anthropic's plugin directory (submit the prepared plugin)
 - [ ] Browser sign-in, for organisations that block device-code sign-in
 - [ ] One-command installer for macOS and Linux (setup there is manual today)
