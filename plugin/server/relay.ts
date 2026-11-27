@@ -9,7 +9,7 @@ export interface RelayDeps {
   instance: string;
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string, kind?: Kind): Promise<void>;
+  say(text: string, kind?: Kind, code?: string): Promise<void>;
   channel(content: string, meta: Record<string, string>): void;
   now(): number;
   waitMinutes: number;
@@ -73,7 +73,7 @@ export function createRelay(r: RelayDeps) {
     const needsMore = preview.length > PREVIEW_MAX;
     const description = clip(String(p.description ?? ""), DESC_MAX);
     const body = needsMore ? `Too long to show here: reply more ${id} to read it` : preview;
-    await r.say(`Permission needed\n${tool}: ${description}\n${body}\nReply "yes ${id}" or "no ${id}".`, "approval");
+    await r.say(`Permission needed\n${tool}: ${description}\n${body}\nReply "yes ${id}" or "no ${id}".`, "approval", needsMore ? undefined : preview);
     r.update((s) => void s.permissions.push({ id, tool, at: r.now(), instance: r.instance, preview, ...(needsMore && { needsMore }) }));
   }
 

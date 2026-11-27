@@ -3,7 +3,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildCard } from "./adapters/card.ts";
 import { botText, type GraphMsg } from "./adapters/graph-chat.ts";
-import { postCard, type WorkflowConfig } from "./adapters/workflow.ts";
+import { postCard, workflowAdapter, type WorkflowConfig } from "./adapters/workflow.ts";
+import type { SetupDeps } from "./setup.ts";
 import type { Auth } from "./auth.ts";
 import { bearer, call, HttpError, type Json, type Net } from "./http.ts";
 import { extraScopes, grantedScopes } from "./scopes.ts";
@@ -19,7 +20,8 @@ export async function scopeWarning(auth: Auth): Promise<string | undefined> {
   const extra = extraScopes(grantedScopes(await auth.graphToken()));
   if (!extra.length) return undefined;
   return `This sign-in can also use: ${extra.join(", ")}. That's more than Away Mode needs (it only reads your chat). ` +
-    "If you can, use your own app registration instead (rerun setup\\install.ps1 without -SignInApp graph-tools).";
+    "If you can, use your own app registration instead (rerun setup\\install.ps1 without -SignInApp graph-tools). " +
+    'This sign-in is already saved; if you don\'t want to continue, call setup with step "cancel" to remove it.';
 }
 
 /** A sign-in refused for lack of consent, explained; undefined for any other error. */
@@ -45,7 +47,9 @@ export interface PairOptions {
 
 /** The chat holding an app message with both the code and our ref, or undefined. */
 async function findChat(o: PairOptions, token: string, code: string): Promise<string | undefined> {
-  const chats = await call(o.net, `${GRAPH}/me/chats?$top=20`, bearer(token));
+  // Most recently active first: the Flow bot chat just got the pairing card, so it leads the list.
+  const q = new URLSearchParams({ $top: "20", $expand: "lastMessagePreview", $orderby: "lastMessagePreview/createdDateTime desc" });
+  const chats = await call(o.net, `${GRAPH}/me/chats?${q}`, bearer(token));
   for (const c of (chats.value ?? []) as Json[]) {
     const id = String(c.id);
     const msgs = await call(o.net, `${GRAPH}/chats/${encodeURIComponent(id)}/messages?$top=10`, bearer(token));
@@ -56,6 +60,17 @@ async function findChat(o: PairOptions, token: string, code: string): Promise<st
     if (hit) return id;
   }
   return undefined;
+}
+
+/** Workflow route, after sign-in: warn about a broad sign-in first, then pair through the flow and switch to it. */
+export async function finishWorkflow(d: SetupDeps, auth: Auth, w: { url: string; ref: string }, accept: boolean): Promise<string> {
+  const warning = accept ? undefined : await scopeWarning(auth);
+  if (warning) return `Show the user this exactly: ${warning}\nOnly if they still want to continue, call setup with step "finish" and accept_scopes true.`;
+  const cfg = await pairWorkflow({ dir: d.dir, net: d.net, auth, url: w.url, ref: w.ref, tenantId: d.tenantId, sleep: d.net.sleep });
+  d.use(workflowAdapter(cfg, w.url, w.ref, () => auth.graphToken(), d.net));
+  const now = d.ctx.deps.now();
+  d.ctx.update((s) => void Object.assign(s, { me: cfg.me, cursor: new Date(now).toISOString() }));
+  return 'Pairing card sent in Teams (it comes from "Workflows"). Ask the user to reply "hi" in that chat, then call setup with step "verify".';
 }
 
 export async function pairWorkflow(o: PairOptions): Promise<WorkflowConfig> {

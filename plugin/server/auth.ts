@@ -115,5 +115,11 @@ export function createAuth(cfg: AuthConfig, net: Net, store: SecretStore, now: (
     return bot.token;
   }
 
-  return { startDeviceCode, finishDeviceCode, graphToken, botToken };
+  /** Forget the saved sign-in (a declined broad token, for one). */
+  async function signOut(): Promise<void> {
+    graph = null;
+    await store.delete(REFRESH);
+  }
+
+  return { startDeviceCode, finishDeviceCode, graphToken, botToken, signOut };
 }

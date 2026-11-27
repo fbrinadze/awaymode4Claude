@@ -51,11 +51,20 @@ test("gives up with the flow hint", async () => {
   expect(err?.message).not.toContain("sig=");
 });
 
+test("the chat search asks Graph for the most recently active chats first", async () => {
+  const { net: n, calls } = net({ "19:a": [appMsg(["Claude Code", "Pairing code PAIR42", "ref k3x9q2ab"])] });
+  await pairWorkflow(opts(n));
+  const list = calls.find((c) => c.url.pathname.endsWith("/me/chats"))!;
+  expect(list.url.searchParams.get("$orderby")).toBe("lastMessagePreview/createdDateTime desc");
+  expect(list.url.searchParams.get("$expand")).toBe("lastMessagePreview");
+});
+
 test("a broad token gives a warning; a narrow one none", async () => {
   expect(await scopeWarning(auth("User.Read Chat.Read openid profile offline_access"))).toBeUndefined();
   const w = await scopeWarning(auth("User.Read Chat.Read Directory.ReadWrite.All"));
   expect(w).toContain("Directory.ReadWrite.All");
   expect(w).toContain("own app registration");
+  expect(w).toContain('step "cancel"');
 });
 
 test("setup finish on the workflow route: warns first on a broad token, pairs once accepted, then sends through the flow", async () => {

@@ -21,7 +21,7 @@ export interface DeliverEnv {
   hours: number;
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string, kind?: Kind): Promise<void>;
+  say(text: string, kind?: Kind, code?: string): Promise<void>;
   notify(method: string, params: Record<string, unknown>): void;
   channel(content: string, meta: Record<string, string>): void;
   answer(id: string, text: string): Promise<void>;

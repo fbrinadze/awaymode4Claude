@@ -19,6 +19,8 @@ export type Kind = "question" | "approval" | "done" | "error" | "update" | "reca
 export interface SendMeta {
   project?: string;
   kind?: Kind;
+  /** The command inside the text (approvals), shown in a fixed-width font where the adapter can. */
+  code?: string;
 }
 
 /** One messaging platform. Another must fit by adding a file, not changing this. */

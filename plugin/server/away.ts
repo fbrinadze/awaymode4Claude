@@ -59,11 +59,11 @@ export function createAway(d: Deps) {
   /** Read, change and write in one locked call, so hooks and other servers can't be clobbered. */
   const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), d.now() - d.waitMinutes * 60_000, fn);
   const away = () => isAway(current(), d.now());
-  const announce = (name: string, text: string, kind: Kind = "reply") => {
+  const announce = (name: string, text: string, kind: Kind = "reply", code?: string) => {
     const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);
-    return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full, { project: name, kind });
+    return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full, { project: name, kind, ...(code && { code: redact(code) }) });
   };
-  const say = (text: string, kind?: Kind) => announce(d.project, text, kind);
+  const say = (text: string, kind?: Kind, code?: string) => announce(d.project, text, kind, code);
   const cancel = (r: "expired" | "handover") => channel(`Away mode ${r === "handover" ? "moved to another project" : "time ran out"}: `
     + "questions and approvals still open in Teams are cancelled. Ask at the terminal.", { kind: "back" });
   const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions, cancel };

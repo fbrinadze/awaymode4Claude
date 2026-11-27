@@ -52,6 +52,7 @@ const fakeAuth = {
   finishDeviceCode: async () => {},
   graphToken: async () => "GRAPH",
   botToken: async () => "BOT",
+  signOut: async () => {},
 } as Auth;
 const ourApp = { id: "inst-1", teamsApp: { externalId: "app" } };
 const reply = (text: string, from = "user-1") => ({

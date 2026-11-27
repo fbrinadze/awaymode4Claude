@@ -14,7 +14,7 @@ test("send posts a card to the workflow URL", async () => {
   expect(calls).toHaveLength(1);
   const body = JSON.parse(calls[0]!.body);
   expect(body.attachments[0].contentType).toBe("application/vnd.microsoft.card.adaptive");
-  expect(body.attachments[0].content.body[0].text).toBe("Claude Code · app");
+  expect(body.attachments[0].content.body[0].inlines[0].text).toBe("Claude Code · app");
   expect(calls[0]!.url.searchParams.get("sig")).toBe("SECRETSIG");
 });
 

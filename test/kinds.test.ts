@@ -40,7 +40,7 @@ test("a permission request sends kind approval", async () => {
   await h.tool("set_away", { on: true });
   const params = { request_id: "abcde", tool_name: "Bash", description: "Run migration", input_preview: "npm run migrate" };
   await h.away.handle(JSON.stringify({ jsonrpc: "2.0", method: "notifications/claude/channel/permission_request", params }));
-  expect(h.fake.meta.at(-1)).toEqual({ project: "a", kind: "approval" });
+  expect(h.fake.meta.at(-1)).toEqual({ project: "a", kind: "approval", code: "npm run migrate" });
 });
 
 test("notify finished sends kind done", async () => {

@@ -9,11 +9,17 @@ const PREFIX = /^\[Claude(?: · [^\]]+)?\] /;
 
 /**
  * Text goes in TextRuns, which Teams shows literally: a TextBlock would read `*`, `_` and `[x](y)` as
- * markdown. One run per line with a newline run between. For approvals the third line is the command.
+ * markdown. One run per line with a newline run between. Lines inside `code` (the command) are monospace.
  */
-function lines(text: string, kind: Kind | undefined): Record<string, unknown>[] {
-  return text.replace(PREFIX, "").split("\n").flatMap((line, i) => {
-    const run = { type: "TextRun", text: line, ...(kind === "approval" && i === 2 && { fontType: "Monospace" }) };
+function lines(text: string, code: string | undefined): Record<string, unknown>[] {
+  const body = text.replace(PREFIX, "");
+  const at = code ? body.indexOf(code) : -1;
+  const end = at + (code?.length ?? 0);
+  let pos = 0;
+  return body.split("\n").flatMap((line, i) => {
+    const mono = at >= 0 && pos >= at && pos + line.length <= end;
+    pos += line.length + 1;
+    const run = { type: "TextRun", text: line, ...(mono && { fontType: "Monospace" }) };
     return i === 0 ? [run] : [{ type: "TextRun", text: "\n" }, run];
   });
 }
@@ -24,9 +30,10 @@ export function buildCard(text: string, meta: SendMeta | undefined, ref: string)
     type: "AdaptiveCard",
     version: "1.4",
     body: [
-      { type: "TextBlock", text: meta?.project ? `Claude Code · ${meta.project}` : "Claude Code", weight: "Bolder", size: "Medium", color: "Accent", wrap: true },
+      // The project is a folder name, so it's a literal TextRun too: `_x_` must not turn italic.
+      { type: "RichTextBlock", inlines: [{ type: "TextRun", text: meta?.project ? `Claude Code · ${meta.project}` : "Claude Code", weight: "Bolder", size: "Medium", color: "Accent" }] },
       { type: "TextBlock", text: `Away Mode · ${LABELS[kind]}`, isSubtle: true, size: "Small", spacing: "None", wrap: true },
-      { type: "RichTextBlock", inlines: lines(text, meta?.kind) },
+      { type: "RichTextBlock", inlines: lines(text, meta?.code) },
       { type: "TextBlock", text: `ref ${ref}`, isSubtle: true, size: "Small", wrap: true },
     ],
   };
