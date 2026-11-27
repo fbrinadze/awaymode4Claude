@@ -14,7 +14,7 @@ It's built on Claude Code [channels](https://code.claude.com/docs/en/channels): 
 | --- | --- |
 | Reply flow | Two-way: answer questions and approve or deny actions from Teams. There is no send-only mode |
 | Triggers | Claude has a question · needs permission · task finished · error or stuck |
-| Platforms | Teams first; Slack later, as one new adapter file |
+| Platforms | Teams; another platform would be one new adapter file |
 | Audience | Public repo; anyone can install it with their own Microsoft tenant. Set up by one person for their own session, or by an IT admin once for a team |
 | Plugin / marketplace names | `away-mode` / `awaymode` (names starting with `claude-` are reserved by Anthropic) |
 | Runtime | Bun, TypeScript, no build step, **zero runtime dependencies** |
@@ -235,7 +235,7 @@ Claude Code copies a plugin's whole folder to each user's machine, so tests, doc
 - No file over 150 lines, no function over 40. Split by job, not by layer.
 - Plain `fetch` for Microsoft APIs. No MSAL or Bot Framework SDK.
 - Hooks exit in under 50 ms when away mode is off.
-- Slack arrives as one new file in `adapters/`. If it needs changes elsewhere, the interface is wrong.
+- Another platform arrives as one new file in `adapters/`. If it needs changes elsewhere, the interface is wrong.
 - Every change ships with a test.
 
 ## Build plan
@@ -288,16 +288,13 @@ Each phase ends with a check that must pass before the next starts.
 - [x] `docs/SETUP.md` (admin + user), `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`
 - [x] CI on Windows, macOS, Linux: validate `--strict`, typecheck, tests; issue templates (signed tags: not yet)
 - [x] Plugin icon (512–2048 px square PNG) for a future directory listing
-- [ ] Tag v0.1.0
+- [x] Tag v0.1.0
 
 **Check:** someone in a different Microsoft tenant installs it from the docs alone in under 15 minutes.
 
-### Phase 5: Slack
+### Phase 5: Slack (dropped)
 
-- [ ] `adapters/slack.ts` using Socket Mode (outgoing websocket, still no public endpoint)
-- [ ] Slack app manifest in `setup/`
-
-**Check:** Phase 1 tests pass against the Slack adapter, and nothing outside `adapters/` and config changed.
+Built and released as v0.2.0 (Socket Mode adapter, code pairing, setup docs), then removed in v0.3.0 before any live test. The code is in git history at tag v0.2.1 if Slack comes back.
 
 ## Risks and open questions
 

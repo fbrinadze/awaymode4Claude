@@ -8,7 +8,7 @@ export interface Msg {
   at: string;
 }
 
-/** One messaging platform. Slack must fit by adding a file, not changing this. */
+/** One messaging platform. Another must fit by adding a file, not changing this. */
 export interface Adapter {
   /** Post a message to the paired user as the bot. */
   send(text: string): Promise<void>;

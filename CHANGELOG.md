@@ -2,6 +2,11 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0] - 2026-11-26
+
+### Removed
+- Slack support (added in 0.2.0, never live-tested). Away Mode is Teams-only again; the code is in git history at v0.2.1 (PR #10).
+
 ## [0.2.1] - 2026-11-26
 
 ### Fixed

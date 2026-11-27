@@ -31,7 +31,7 @@ bun run validate                 # claude plugin validate --strict on marketplac
 ## Architecture (planned, see `docs/PLAN.md` "Architecture" and "Repository layout")
 
 - **Channel server** (`plugin/server/`): a hand-rolled stdio JSON-RPC MCP server (`mcp.ts`, **not** the MCP SDK) that declares `claude/channel` and `claude/channel/permission`, exposes `ask` and `notify` tools, relays permission prompts, and routes replies.
-- **Adapters** (`server/adapters/`): an interface with `send()`, `poll()` and `me()`. Teams = Bot Connector REST to send (bot client-credentials token) plus Microsoft Graph delegated `Chat.Read` polling of the bot chat. Slack later must be **one new adapter file**. If it needs changes elsewhere, the interface is wrong.
+- **Adapters** (`server/adapters/`): an interface with `send()`, `poll()` and `me()`. Teams = Bot Connector REST to send (bot client-credentials token) plus Microsoft Graph delegated `Chat.Read` polling of the bot chat. Another platform must be **one new adapter file**. If it needs changes elsewhere, the interface is wrong.
 - **No inbound network listener, ever.** Replies arrive by polling, and only while away mode is on (backoff from 5 s to 60 s). No card buttons, because they'd need a bot web endpoint.
 - **Hooks** (`plugin/hooks/hook.ts`): `PreToolUse` (redirect `AskUserQuestion` to `ask` while away), `Stop` (make sure a finished note goes out), `StopFailure` (error alert), `UserPromptSubmit` (terminal input ends away mode). Hooks **import nothing** and must exit in under 50 ms when away mode is off.
 - **State**: `${CLAUDE_PLUGIN_DATA}/state.json`, shared by the server and the hooks.
