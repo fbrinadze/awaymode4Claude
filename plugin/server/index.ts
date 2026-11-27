@@ -1,14 +1,18 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
 import { createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
+import { doctorTool } from "./doctor.ts";
 import type { Net } from "./http.ts";
 import { baseTag, projectKey } from "./project.ts";
 import { setProject } from "./state.ts";
 import { secretStore } from "./secrets.ts";
 import { setupTool } from "./setup.ts";
+
+const version = (JSON.parse(readFileSync(new URL("../.claude-plugin/plugin.json", import.meta.url), "utf8")) as { version: string }).version;
 
 const fail = async (): Promise<never> => {
   throw new Error("Away Mode isn't connected to Teams yet. Run /away-mode:setup.");
@@ -59,13 +63,17 @@ const away = createAway({
   adapter,
   extraTools: (ctx) => [
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
+    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current }),
   ],
   dir,
+  key: projectKey(projectDir),
   project: tag,
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
   neverRelay: list(process.env.AWAY_NEVER_RELAY, ["rm -rf", "git push --force", "deploy"]),
   endOfDay: setting(process.env.AWAY_END_OF_DAY_ACTION).toLowerCase() === "safest" ? "safest" : "park",
+  sessions: setting(process.env.AWAY_SESSIONS).toLowerCase() === "one" ? "one" : "several",
+  replyRouting: setting(process.env.AWAY_REPLY_ROUTING).toLowerCase() === "on",
   now: Date.now,
   sleep: net.sleep,
   write: (line) => void process.stdout.write(line),

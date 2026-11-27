@@ -1,4 +1,5 @@
 import type { Msg } from "./adapters/adapter.ts";
+import { parseCommand } from "./commands.ts";
 import type { State } from "./state.ts";
 
 export type Action =
@@ -9,7 +10,13 @@ export type Action =
   | { kind: "answer"; questionId: string; text: string }
   | { kind: "instruction"; text: string }
   | { kind: "status" }
-  | { kind: "back" };
+  | { kind: "back" }
+  | { kind: "extend"; minutes: number }
+  | { kind: "extend"; at: string }
+  | { kind: "snooze"; minutes: number }
+  | { kind: "snooze"; at: string }
+  | { kind: "unsnooze" }
+  | { kind: "more"; id: string };
 
 // Claude Code request IDs: five letters a-z without "l".
 const VERDICT = /^(y|yes|n|no)(?:\s+([a-km-z]{5}))?$/i;
@@ -76,16 +83,20 @@ export function parseTargeted(text: string, s: State): Action | null {
   return { kind: "answer", questionId: id!, text: m[2]!.trim() };
 }
 
-/** Exact `status` or `back`, nothing else. */
-export function parseCommand(text: string): Action | null {
-  const word = text.toLowerCase();
-  return word === "status" || word === "back" ? { kind: word } : null;
-}
-
 /** Plain text answers the newest open question. */
 export function answerLatest(text: string, s: State): Action | null {
   const q = s.questions.at(-1);
   return q ? { kind: "answer", questionId: q.id, text } : null;
+}
+
+/** One project's view of a message: verdict, then #qN, command, plain answer, else an instruction. */
+export function routeProject(text: string, s: State, sentAt: number): Action {
+  return (
+    parseVerdict(text, s, sentAt) ??
+    parseTargeted(text, s) ??
+    parseCommand(text) ??
+    answerLatest(text, s) ?? { kind: "instruction", text }
+  );
 }
 
 /** Decide what one inbound message means. Pure: no I/O. */
@@ -94,12 +105,7 @@ export function route(msg: Msg, s: State): Action {
   if (!s.me || msg.from !== s.me) return { kind: "drop" };
   const text = msg.text.trim();
   if (!text) return { kind: "drop" };
-  // Verdicts first (PLAN.md). Commands beat plain answers so "back" always works from a phone;
+  // Commands beat plain answers so "back" always works from a phone;
   // the cost is that a bare "back" or "status" can't answer a question (use "#qN back").
-  return (
-    parseVerdict(text, s, Date.parse(msg.at)) ??
-    parseTargeted(text, s) ??
-    parseCommand(text) ??
-    answerLatest(text, s) ?? { kind: "instruction", text }
-  );
+  return routeProject(text, s, Date.parse(msg.at));
 }

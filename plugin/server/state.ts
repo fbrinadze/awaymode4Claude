@@ -1,4 +1,4 @@
-import { freshProject, readStore, withStore } from "./store.ts";
+import { freshProject, readStore, type RecapItem, withStore } from "./store.ts";
 
 export interface Question {
   id: string;
@@ -42,6 +42,9 @@ export interface State {
   awaySession?: string;
   /** Messages queued by hooks (which can't send) for the server to deliver on its next poll. */
   outbox: { type: string; text: string }[];
+  /** Epoch ms until which finished/info notes are held for the recap; 0 = not snoozed. */
+  snoozeUntil: number;
+  recap: RecapItem[];
 }
 
 export const fresh = (): State => ({
@@ -55,6 +58,8 @@ export const fresh = (): State => ({
   lastStopAt: 0,
   awayStartedAt: 0,
   outbox: [],
+  snoozeUntil: 0,
+  recap: [],
 });
 
 export const isAway = (s: State, now: number): boolean => s.awayUntil > now;
@@ -65,26 +70,32 @@ export function setProject(key: string, tag: string): void {
   mine = { key, tag };
 }
 
+/** The tag a new entry for this key gets (only this server's own project has one). */
+export const tagOf = (key: string): string => (key === mine.key ? mine.tag : "");
+
 /** This project's view of state.json: shared pairing and cursor plus its own entry. Fails closed. */
-export function load(dir: string): State {
-  const s = readStore(dir, Date.now(), mine);
-  const p = s.projects[mine.key] ?? freshProject(mine.tag);
+export function load(dir: string, key = mine.key): State {
+  const me = { key, tag: key === mine.key ? mine.tag : "" };
+  const s = readStore(dir, Date.now(), me);
+  const p = s.projects[key] ?? freshProject(me.tag);
   return {
     awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
     permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
     awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
+    snoozeUntil: p.snoozeUntil, recap: p.recap,
   };
 }
 
 /** Write this project's view back under the lock (0600, temp file then rename). */
-export function save(dir: string, v: State): void {
+export function save(dir: string, v: State, key = mine.key): void {
+  const me = { key, tag: key === mine.key ? mine.tag : "" };
   withStore(dir, Date.now(), (s) => {
     Object.assign(s, { me: v.me, cursor: v.cursor, nextQ: v.nextQ });
-    const p = s.projects[mine.key] ?? freshProject(mine.tag);
-    s.projects[mine.key] = {
-      ...p, tag: p.tag || mine.tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
+    const p = s.projects[key] ?? freshProject(me.tag);
+    s.projects[key] = {
+      ...p, tag: p.tag || me.tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
       lastSentAt: v.lastSentAt, lastStopAt: v.lastStopAt, awayStartedAt: v.awayStartedAt,
-      sessionId: v.awaySession, outbox: v.outbox,
+      sessionId: v.awaySession, outbox: v.outbox, snoozeUntil: v.snoozeUntil, recap: v.recap,
     };
-  }, mine);
+  }, me);
 }

@@ -45,6 +45,7 @@ const graphMsg = (id: string, at: string, over: object = {}) => ({
   id,
   messageType: "message",
   lastModifiedDateTime: at,
+  createdDateTime: at,
   from: { user: { id: "user-1" }, application: null },
   body: { contentType: "html", content: `<p>${id}</p>` },
   ...over,
@@ -57,13 +58,13 @@ test("poll: asks Graph for newer messages and returns your replies oldest first"
     graphMsg("sys", "2026-11-26T18:00:03.500Z", { messageType: "systemEventMessage", from: null }),
     graphMsg("edited", "2026-11-26T18:00:02.500Z", { lastEditedDateTime: "2026-11-26T18:00:02.500Z" }),
     graphMsg("gone", "2026-11-26T18:00:02.200Z", { deletedDateTime: "2026-11-26T18:00:02.200Z" }),
-    graphMsg("m1", "2026-11-26T18:00:01.000Z", { body: { content: "yes&nbsp;abcde<br>thanks &amp; bye" } }),
+    graphMsg("m1", "2026-11-26T18:00:01.000Z", { body: { content: "yes&nbsp;abcde<br>thanks &amp; bye" }, createdDateTime: "2026-11-26T18:00:00.500Z" }),
   ];
   const { net, calls } = fakeNet([["GET https://graph.microsoft.com/v1.0/chats/", () => ({ value: page })]]);
   const msgs = await teamsAdapter(dir(), cfg(), auth, net).poll("2026-11-26T18:00:00.000Z");
   expect(msgs).toEqual([
-    { id: "m1", from: "user-1", text: "yes abcde\nthanks & bye", at: "2026-11-26T18:00:01.000Z" },
-    { id: "m4", from: "user-1", text: "m4", at: "2026-11-26T18:00:04.000Z" },
+    { id: "m1", from: "user-1", text: "yes abcde\nthanks & bye", at: "2026-11-26T18:00:01.000Z", sentAt: "2026-11-26T18:00:00.500Z" },
+    { id: "m4", from: "user-1", text: "m4", at: "2026-11-26T18:00:04.000Z", sentAt: "2026-11-26T18:00:04.000Z" },
   ]);
   const q = calls[0]!.url.searchParams;
   expect(calls[0]!.url.pathname).toBe("/v1.0/chats/19%3Aabc%40unq.gbl.spaces/messages");
@@ -107,4 +108,24 @@ test("secret store falls back to a file when the keychain refuses", async () => 
   expect(await store.get("t")).toBeNull();
   writeFileSync(join(d, "x.secret"), "");
   expect(await store.get("x")).toBeNull(); // an empty file isn't a secret
+});
+
+test("poll: a reply quoting a tagged bot message carries replyTag; the quote marker is stripped", async () => {
+  const ref = (id: string) => ({ contentType: "messageReference", content: JSON.stringify({ messageId: id, messagePreview: "x", messageSender: {} }) });
+  const page = [
+    graphMsg("r2", "2026-11-26T18:00:05.000Z", { body: { content: '<attachment id="123"></attachment><p>spike test</p>' }, attachments: [ref("111")] }),
+    graphMsg("r3", "2026-11-26T18:00:04.000Z", { attachments: [ref("999")] }),
+    graphMsg("r4", "2026-11-26T18:00:03.500Z", { attachments: [{ contentType: "messageReference", content: "{not json" }] }),
+    graphMsg("111", "2026-11-26T18:00:03.000Z", {
+      from: { user: null, application: { id: "app" } },
+      body: { content: "<p>[Claude · b] Question q3…</p>" },
+    }),
+  ];
+  const { net } = fakeNet([["GET https://graph.microsoft.com/v1.0/chats/", () => ({ value: page })]]);
+  const msgs = await teamsAdapter(dir(), cfg(), auth, net).poll("2026-11-26T18:00:00.000Z");
+  expect(msgs.map((m) => [m.id, m.replyTag, m.text])).toEqual([
+    ["r4", undefined, "r4"],
+    ["r3", undefined, "r3"],
+    ["r2", "b", "spike test"],
+  ]);
 });

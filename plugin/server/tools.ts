@@ -1,4 +1,5 @@
 import type { Json, Tool } from "./mcp.ts";
+import type { EndReason } from "./recap.ts";
 import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
 import { resolveUntil } from "./when.ts";
@@ -9,6 +10,10 @@ export interface Ctx {
   update(fn: (s: State) => void): State;
   say(text: string): Promise<void>;
   startPolling(): void;
+  /** A clean new away period (clears pending items, takes delivery ownership). */
+  startAway(until: number): string[];
+  /** End away mode and return the recap text. */
+  endAway(reason: EndReason): string;
 }
 
 const HEADERS: Record<string, string> = { finished: "Done", error: "Error", info: "Update" };
@@ -83,6 +88,11 @@ export function makeTools(c: Ctx): Tool[] {
       else if (Object.hasOwn(HEADERS, type)) {
         const body = text(a.text, "text");
         if (await refuse([body])) return NOT_SENT;
+        if (type !== "error" && c.current().snoozeUntil > c.deps.now()) {
+          c.update((s) => void s.recap.push({ kind: type as "finished" | "info", text: body }));
+          sent();
+          return "Held for the user's recap: they snoozed Teams. Questions, approvals and errors still go through.";
+        }
         await c.say(`${HEADERS[type]}\n${body}`);
       } else throw new Error("type must be finished, error, info or sensitive.");
       sent();
@@ -108,23 +118,16 @@ export function makeTools(c: Ctx): Tool[] {
     async run(a) {
       const now = c.deps.now();
       if (a.on !== true) {
-        c.update((s) => void (s.awayUntil = 0));
+        const wasAway = isAway(c.current(), now);
+        const recap = c.endAway("off");
+        if (wasAway) await c.say(recap);
         return "Away mode off.";
       }
       const until = resolveUntil(a, now, c.deps.hours);
       if (!(until > now)) {
         throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
       }
-      c.update((s) => {
-        // Replies typed before going away aren't for us; extending keeps the cursor.
-        // A new away period: replies typed before it aren't for us, and last time's open questions are stale.
-        if (!isAway(s, now)) {
-          s.cursor = new Date(now).toISOString();
-          s.questions = [];
-        }
-        s.awayUntil = until;
-        s.awayStartedAt = now; // the Stop hook lets this turn end without a "finished" note
-      });
+      for (const note of c.startAway(until)) await c.say(note); // awayStartedAt lets the Stop hook end this turn without a "finished" note
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },

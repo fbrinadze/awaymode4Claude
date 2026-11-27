@@ -76,7 +76,7 @@ function project(v: unknown): ProjectState {
  * No clock here: expiry by time is the lifecycle sweep's job, with the injected clock.
  */
 const idle = (p: ProjectState) =>
-  p.awayUntil === 0 && !p.questions.length && !p.permissions.length && !p.inbox.length && !p.outbox.length && !p.recap.length;
+  p.awayUntil === 0 && !p.ownerInstance && !p.questions.length && !p.permissions.length && !p.inbox.length && !p.outbox.length && !p.recap.length;
 
 /** v1 kept everything at the top level. Keep the pairing; pending items from before can't be trusted. */
 function migrate(v: Obj, to?: { key: string; tag: string }): Store {
