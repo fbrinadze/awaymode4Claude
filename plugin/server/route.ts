@@ -88,18 +88,23 @@ export function answerLatest(text: string, s: State): Action | null {
   return q ? { kind: "answer", questionId: q.id, text } : null;
 }
 
+/** One project's view of a message: verdict, then #qN, command, plain answer, else an instruction. */
+export function routeProject(text: string, s: State, sentAt: number): Action {
+  return (
+    parseVerdict(text, s, sentAt) ??
+    parseTargeted(text, s) ??
+    parseCommand(text) ??
+    answerLatest(text, s) ?? { kind: "instruction", text }
+  );
+}
+
 /** Decide what one inbound message means. Pure: no I/O. */
 export function route(msg: Msg, s: State): Action {
   // The whole security model: only the paired account gets through.
   if (!s.me || msg.from !== s.me) return { kind: "drop" };
   const text = msg.text.trim();
   if (!text) return { kind: "drop" };
-  // Verdicts first (PLAN.md). Commands beat plain answers so "back" always works from a phone;
+  // Commands beat plain answers so "back" always works from a phone;
   // the cost is that a bare "back" or "status" can't answer a question (use "#qN back").
-  return (
-    parseVerdict(text, s, Date.parse(msg.at)) ??
-    parseTargeted(text, s) ??
-    parseCommand(text) ??
-    answerLatest(text, s) ?? { kind: "instruction", text }
-  );
+  return routeProject(text, s, Date.parse(msg.at));
 }
