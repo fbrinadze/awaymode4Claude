@@ -3,11 +3,12 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
-import { BOT_SCOPES, createAuth } from "./auth.ts";
+import { type AuthConfig, BOT_SCOPES, createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import { doctorTool } from "./doctor.ts";
 import type { Net } from "./http.ts";
 import { baseTag, projectKey } from "./project.ts";
+import { routeConfig } from "./route-config.ts";
 import { setProject } from "./state.ts";
 import { secretStore } from "./secrets.ts";
 import { setupTool } from "./setup.ts";
@@ -45,14 +46,18 @@ const tenantId = setting(process.env.AWAY_TENANT_ID);
 const botId = setting(process.env.AWAY_BOT_ID);
 const botSecret = setting(process.env.AWAY_BOT_SECRET);
 const net: Net = { fetch: (url, init) => fetch(url, init), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
-const auth =
-  tenantId && botId && botSecret
-    ? createAuth({ authority: tenantId, clientId: botId, scopes: BOT_SCOPES, botSecret },net, secretStore(dir), Date.now)
-    : null;
+const routeCfg = routeConfig(process.env);
+const authCfg: AuthConfig | null =
+  routeCfg.route === "workflow"
+    ? routeCfg.auth
+    : tenantId && botId && botSecret
+      ? { authority: tenantId, clientId: botId, scopes: BOT_SCOPES, botSecret }
+      : null;
+const auth = authCfg ? createAuth(authCfg, net, secretStore(dir), Date.now) : null;
 
 // Swappable so a successful setup switches to Teams without a restart.
 const saved = loadTeams(dir);
-let current: Adapter = auth && saved ? teamsAdapter(dir, saved, auth, net) : notSetUp;
+let current: Adapter = routeCfg.route === "bot" && auth && saved ? teamsAdapter(dir, saved, auth, net) : notSetUp; // workflow adapter wired in Task 7
 const adapter: Adapter = {
   send: (text) => current.send(text),
   poll: (since) => current.poll(since),

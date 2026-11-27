@@ -43,7 +43,10 @@
         "AWAY_END_OF_DAY_ACTION": "${user_config.end_of_day_action}",
         "AWAY_NEVER_RELAY": "${user_config.never_relay}",
         "AWAY_SESSIONS": "${user_config.sessions}",
-        "AWAY_REPLY_ROUTING": "${user_config.reply_routing}"
+        "AWAY_REPLY_ROUTING": "${user_config.reply_routing}",
+        "AWAY_TEAMS_ROUTE": "${user_config.teams_route}",
+        "AWAY_WORKFLOW_URL": "${user_config.workflow_url}",
+        "AWAY_SIGN_IN_APP": "${user_config.sign_in_app}"
       }
     }
   },
@@ -109,6 +112,23 @@
       "title": "Reply-to-message routing",
       "description": "on = quoting a bot message in Teams sends your reply to that message's project. off = use @project.",
       "default": "off"
+    },
+    "teams_route": {
+      "type": "string",
+      "title": "Teams route",
+      "description": "bot = the Away Mode Teams app (needs a Teams admin). workflow = a Power Automate workflow (no admin).",
+      "default": "bot"
+    },
+    "workflow_url": {
+      "type": "string",
+      "title": "Workflow URL",
+      "description": "workflow route: the Power Automate workflow's URL. Stored in your OS keychain.",
+      "sensitive": true
+    },
+    "sign_in_app": {
+      "type": "string",
+      "title": "Sign-in app ID",
+      "description": "workflow route: your app registration's ID, or graph-tools"
     }
   }
 }

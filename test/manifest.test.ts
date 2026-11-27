@@ -39,6 +39,16 @@ test("listing metadata: https urls, icon, plugin README and LICENSE, size limits
   for (const f of files) expect(statSync(join(f.parentPath, f.name)).size).toBeLessThanOrEqual(256 * 1024);
 });
 
+test("manifest declares the three route settings in userConfig and env, workflow_url sensitive", () => {
+  const plugin = read(".claude-plugin/plugin.json");
+  expect(plugin.userConfig.teams_route).toMatchObject({ type: "string", default: "bot" });
+  expect(plugin.userConfig.workflow_url).toMatchObject({ type: "string", sensitive: true });
+  expect(plugin.userConfig.sign_in_app).toMatchObject({ type: "string" });
+  expect(plugin.mcpServers.away.env.AWAY_TEAMS_ROUTE).toBe("${user_config.teams_route}");
+  expect(plugin.mcpServers.away.env.AWAY_WORKFLOW_URL).toBe("${user_config.workflow_url}");
+  expect(plugin.mcpServers.away.env.AWAY_SIGN_IN_APP).toBe("${user_config.sign_in_app}");
+});
+
 test("sessions and reply_routing settings default safely and reach the server as env vars", () => {
   const plugin = read(".claude-plugin/plugin.json");
   expect(plugin.userConfig.sessions).toMatchObject({ type: "string", default: "several" });
