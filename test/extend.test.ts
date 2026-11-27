@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "bun:test";
 import { makeAct } from "../plugin/server/deliver.ts";
 import { fresh } from "../plugin/server/state.ts";
+import { clock } from "../plugin/server/when.ts";
 
 const T = Date.parse("2026-11-26T18:00:00Z");
 
@@ -22,7 +23,7 @@ test("extend 30m adds exactly 30 minutes and replies with the new end", async ()
   const e = env(T + 3_600_000);
   await e.act({ kind: "extend", minutes: 30 });
   expect(e.st.awayUntil).toBe(T + 5_400_000);
-  expect(e.said.at(-1)).toBe(`Away until ${new Date(T + 5_400_000).toString()} for order-portal.`);
+  expect(e.said.at(-1)).toBe(`Away until ${clock(T + 5_400_000, T)} for order-portal.`);
 });
 
 // Local-time clocks, so the tests hold in any timezone.

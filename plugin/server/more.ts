@@ -13,6 +13,6 @@ export async function more(e: DeliverEnv, id: string): Promise<void> {
   const size = Math.min(MORE_PART, (e.room ?? Infinity) - "(5/5) ".length);
   const n = size > 0 ? Math.ceil(perm.preview.length / size) : Infinity;
   if (n > MORE_MAX_PARTS) return e.say("Too long for Teams. Approve it at the terminal.");
-  for (let i = 0; i < n; i++) await e.say(`(${i + 1}/${n}) ${perm.preview.slice(i * size, (i + 1) * size)}`);
+  for (let i = 0; i < n; i++) await e.say(`(${i + 1}/${n}) ${perm.preview.slice(i * size, (i + 1) * size)}`, "approval", perm.preview.slice(i * size, (i + 1) * size));
   e.update((s) => void (s.permissions.find((p) => p.id === id)!.moreSent = true));
 }

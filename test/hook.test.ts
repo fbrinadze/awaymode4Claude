@@ -178,6 +178,9 @@ test("no welcome-back message when the state write was skipped (lock busy)", asy
   const a = key("/a");
   const dir = seed({ [a]: { ...away(), awayUntil: Date.now() + 3_600_000 } });
   writeFileSync(join(dir, "state.lock"), String(process.pid)); // held by a live process
+  const t0 = Date.now();
   const out = await runOut(dir, "/a", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
   expect(out).toBe("");
-});
+  // The hook gives up after its 2 s lock deadline (plus process start), never much later.
+  expect(Date.now() - t0).toBeLessThan(6000);
+}, 15_000); // waits on purpose and starts a fresh bun process, which is slow on CI runners

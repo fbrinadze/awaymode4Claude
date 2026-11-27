@@ -1,5 +1,5 @@
 // The single Graph poller: whoever holds the lease fetches, dispatches and fills inboxes.
-import type { Adapter, Msg } from "./adapters/adapter.ts";
+import type { Adapter, Kind, Msg } from "./adapters/adapter.ts";
 import { dispatch, type Routed } from "./dispatch.ts";
 import { LEASE_MS, releaseLease, takeLease } from "./lease.ts";
 import { tagFor } from "./project.ts";
@@ -17,7 +17,7 @@ export interface PollerDeps {
   adapter: Adapter;
   deliverLocal(r: Routed): Promise<void>;
   /** Post a message labelled with a project's tag. */
-  announce(tag: string, text: string): Promise<void>;
+  announce(tag: string, text: string, kind?: Kind): Promise<void>;
   /** Route replies to a quoted project message (Task 14 wires the setting). */
   replyRouting?: boolean;
   /** Permissions older than this many minutes no longer route as verdicts. */
@@ -97,7 +97,7 @@ export async function sweepExpired(d: PollerDeps): Promise<void> {
       const text = sweepOne(p, t);
       return text === null ? [] : [{ tag: tagFor(k, s), text }];
     }));
-  for (const r of recaps) await d.announce(r.tag, r.text);
+  for (const r of recaps) await d.announce(r.tag, r.text, "recap");
 }
 
 /** One poll cycle; returns how many messages arrived (0 when not the holder). Graph I/O stays outside the lock. */

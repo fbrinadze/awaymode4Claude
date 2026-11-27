@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { createAuth, SignedOut } from "../plugin/server/auth.ts";
+import { BOT_SCOPES, createAuth, GRAPH_TOOLS_ID, SignedOut, WORKFLOW_SCOPES } from "../plugin/server/auth.ts";
 import { fakeNet, formOf, memoryStore } from "./fake-net.ts";
 
-const cfg = { tenantId: "tid", clientId: "app", botSecret: "s3cret" };
+const cfg = { authority: "tid", clientId: "app", scopes: BOT_SCOPES, botSecret: "s3cret" };
 const err = (error: string) => Response.json({ error, error_description: `${error} happened` }, { status: 400 });
 const tokens = (n: number) => ({ access_token: `at${n}`, refresh_token: `rt${n}`, expires_in: 3600 });
 
@@ -78,4 +78,23 @@ test("bot token: client credentials for the Bot Framework, cached", async () => 
     client_secret: "s3cret",
     scope: "https://api.botframework.com/.default",
   });
+});
+
+test("workflow scopes have no TeamsAppInstallation", () => {
+  expect(WORKFLOW_SCOPES).toBe("User.Read Chat.Read offline_access");
+  expect(WORKFLOW_SCOPES).not.toContain("TeamsAppInstallation");
+});
+
+test("graph-tools uses organizations", async () => {
+  const { net, calls } = fakeNet([["/devicecode", () => ({ device_code: "dc", message: "m", interval: 1, expires_in: 900 })]]);
+  const auth = createAuth({ authority: "organizations", clientId: GRAPH_TOOLS_ID, scopes: WORKFLOW_SCOPES }, net, memoryStore(), () => 0);
+  await auth.startDeviceCode();
+  expect(calls[0]!.url.href).toContain("/organizations/oauth2/v2.0/devicecode");
+  expect(formOf(calls[0]!).client_id).toBe("14d82eec-204b-4c2f-b7e8-296a70dab67e");
+  expect(formOf(calls[0]!).scope).toBe(WORKFLOW_SCOPES);
+});
+
+test("botToken without a secret explains", async () => {
+  const auth = createAuth({ authority: "tid", clientId: "app", scopes: WORKFLOW_SCOPES }, fakeNet([]).net, memoryStore(), () => 0);
+  await expect(auth.botToken()).rejects.toThrow("No bot on this route.");
 });

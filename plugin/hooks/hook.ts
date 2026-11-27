@@ -90,9 +90,10 @@ function holderDead(path: string): boolean {
   }
 }
 
-/** Same protocol as the server's store lock: wx create with our pid, stale after 5 s or a dead holder, retry 50 ms up to 2 s. */
+/** Same protocol as the server's store lock: wx create with our pid, stale after 5 s or a dead holder, retry every 50 ms for 2 s. */
 function lock(path: string): boolean {
-  for (let waited = 0; waited <= 2000; waited += 50) {
+  // A real deadline, not a count of sleeps: on a loaded machine each sleep overshoots and 41 of them ran past 5 s in CI.
+  for (const give = Date.now() + 2000; Date.now() <= give; ) {
     try {
       writeFileSync(path, String(process.pid), { flag: "wx" });
       return true;

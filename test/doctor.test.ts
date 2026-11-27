@@ -59,6 +59,45 @@ test("send_test sends one message through the current adapter", async () => {
   expect(lines.at(-1)).toStartWith("✔ test message");
 });
 
+const jwt = (scp: string) => `h.${Buffer.from(JSON.stringify({ scp })).toString("base64url")}.s`;
+const wfDeps = (scp: string, over: Partial<DoctorDeps> = {}) =>
+  deps({ route: "workflow", workflowUrlSet: true, auth: { graphToken: async () => jwt(scp) } as Auth, ...over });
+const pairWf = (dir: string) =>
+  writeFileSync(join(dir, "teams.json"), JSON.stringify({ route: "workflow", tenantId: "tid", chatId: "19:c", me: "user-1" }));
+
+test("workflow doctor never prints the URL", async () => {
+  const { d, dir } = wfDeps("User.Read Chat.Read");
+  pairWf(dir);
+  const lines = await run(d);
+  expect(lines).toContain("✔ route: workflow");
+  expect(lines).toContain("✔ workflow URL set");
+  expect(lines).toContain("✔ paired");
+  expect(lines.some((l) => l.startsWith("✔ sign-in scopes"))).toBe(true);
+  expect(lines.join("\n")).not.toContain("http");
+});
+
+test("workflow doctor: missing URL and unpaired show ✘", async () => {
+  const { d } = wfDeps("User.Read Chat.Read", { workflowUrlSet: false });
+  const lines = await run(d);
+  expect(lines.some((l) => l.startsWith("✘ workflow URL"))).toBe(true);
+  expect(lines.some((l) => l.startsWith("✘ paired"))).toBe(true);
+});
+
+test("broad scopes show ✘ with the list", async () => {
+  const { d } = wfDeps("User.Read Chat.Read Mail.Read Files.ReadWrite.All");
+  const l = (await run(d)).find((x) => x.startsWith("✘ sign-in scopes"));
+  expect(l).toContain("Mail.Read");
+  expect(l).toContain("Files.ReadWrite.All");
+  expect(l).not.toContain("Chat.Read");
+});
+
+test("bot doctor unchanged: no workflow lines", async () => {
+  const { d, dir } = deps();
+  pair(dir);
+  const lines = await run(d);
+  expect(lines.some((l) => l.includes("route:") || l.includes("workflow URL") || l.includes("scopes"))).toBe(false);
+});
+
 test("send_test failure is reported, not thrown", async () => {
   const { d } = deps({ current: () => ({ send: async () => { throw new Error("nope"); }, poll: async () => [], me: async () => "" }) });
   expect((await run(d, { send_test: true })).at(-1)).toStartWith("✘ test message");

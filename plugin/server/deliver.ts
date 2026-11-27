@@ -1,4 +1,5 @@
 // Per-project delivery: acting on a routed action, and which server instance owns delivery.
+import type { Kind } from "./adapters/adapter.ts";
 import { LEASE_MS } from "./lease.ts";
 import type { EndReason } from "./recap.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
@@ -6,7 +7,7 @@ import { more } from "./more.ts";
 import { tagFor } from "./project.ts";
 import type { Action } from "./route.ts";
 import { isAway, type State } from "./state.ts";
-import { resolveUntil } from "./when.ts";
+import { clock, resolveUntil } from "./when.ts";
 import { withStore } from "./store.ts";
 import { statusText } from "./tools.ts";
 
@@ -20,7 +21,7 @@ export interface DeliverEnv {
   hours: number;
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string): Promise<void>;
+  say(text: string, kind?: Kind, code?: string): Promise<void>;
   notify(method: string, params: Record<string, unknown>): void;
   channel(content: string, meta: Record<string, string>): void;
   answer(id: string, text: string): Promise<void>;
@@ -80,7 +81,7 @@ async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Pr
   if (until === null) return e.say(`${(a as { at: string }).at} has already passed today. Try extend 30m or until a later time.`);
   if (!(until > now)) return e.say("Couldn't read that time. Try \"extend 30m\" or \"until 6pm\".");
   e.update((s) => void (s.awayUntil = until));
-  return e.say(`Away until ${new Date(until).toString()} for ${tag}.`);
+  return e.say(`Away until ${clock(until, now)} for ${tag}.`);
 }
 
 /** `snooze 30m` / `snooze until 3pm` / `unsnooze`: finished and info notes wait for the recap. */
@@ -95,7 +96,7 @@ async function snooze(e: DeliverEnv, a: Extract<Action, { kind: "snooze" | "unsn
   const until = "minutes" in a ? now + a.minutes * 60_000 : resolveUntil({ at: a.at }, now, e.hours);
   if (!(until > now)) return e.say("Couldn't read that time. Try \"snooze 30m\" or \"snooze until 3pm\".");
   e.update((s) => void (s.snoozeUntil = until));
-  return e.say(`Snoozed until ${new Date(until).toString()} for ${tag}. Questions, approvals and errors still come through.`);
+  return e.say(`Snoozed until ${clock(until, now)} for ${tag}. Questions, approvals and errors still come through.`);
 }
 
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
@@ -123,7 +124,7 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
       case "snooze": case "unsnooze": return snooze(e, a);
       case "back":
         e.channel("The user ended away mode from Teams.", { kind: "back" });
-        return e.say(e.end("back"));
+        return e.say(e.end("back"), "recap");
     }
   };
 }

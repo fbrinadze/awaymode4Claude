@@ -12,6 +12,8 @@ Away Mode relays Claude Code's questions, permission prompts, finished-task note
 
 Away Mode runs on Bun, so Bun must be installed.
 
+There are two routes to Teams: the bot route (needs a Teams admin) and the workflow route (no admin; a Power Automate flow you make sends the messages). See the setup guide linked below.
+
 ## Organization admins
 
 Channels must be enabled for the organization and Away Mode allowed. In managed settings:

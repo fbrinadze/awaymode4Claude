@@ -2,6 +2,27 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.2.0] - 2026-11-27
+
+### Added
+- **A no-admin route to Teams: the workflow route.** A Power Automate flow you make sends the messages, and your own small app registration reads your replies. No Teams admin and no Azure subscription. The installer takes `-Route workflow` and `-SignInApp`, and `/away-mode:doctor` has workflow checks. See [docs/SETUP.md](docs/SETUP.md).
+- **Cards that say where they're from.** On the workflow route each message says Claude Code and the project, since Teams shows the sender as "Workflows".
+- **A hidden per-install marker** on every card, so other people's flows can't pass as yours.
+- **Settings:** `teams_route` (`bot` or `workflow`), `workflow_url` (sensitive) and `sign_in_app`.
+
+### Changed
+- Teams messages on the workflow route are cards.
+- Friendly times on both routes: "Away until 6:30 PM".
+- The installer is split into `install-workflow.ps1` and `install-bot.ps1`, and keeps the bot route when you re-run it.
+
+### Security
+- The workflow route signs in with only `User.Read` and `Chat.Read`.
+- The workflow URL is kept in the OS keychain and is never shown in errors, doctor or Teams.
+- Setup warns before pairing if a sign-in carries more permissions than Away Mode needs, and `setup cancel` removes it.
+
+### Known
+- "Workflows" posts an automatic "I can't respond to messages" note after each of your replies. It is Microsoft's, not Away Mode's.
+
 ## [1.1.0] - 2026-11-27
 
 ### Added

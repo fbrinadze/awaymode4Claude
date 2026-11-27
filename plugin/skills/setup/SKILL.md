@@ -23,7 +23,8 @@ Walk the user through connecting this Claude Code session to Teams, using the Aw
 2. When they say they're done, call `setup` with `step: "finish"`.
    - If it says the app isn't added in Teams, relay those instructions (upload `away-mode-teams.zip` in Teams, or add it from their organization's apps), wait for them, then call `finish` again. They don't need to sign in again.
    - If sign-in failed because their organization blocks device-code sign-in, say so plainly: browser sign-in isn't supported yet.
-3. Ask them to reply **hi** to the Away Mode bot in Teams, then call `setup` with `step: "verify"`. If there's no reply yet, wait for them to confirm and verify again.
+   - **Workflow route** (no Teams admin): `finish` sends the pairing card through the user's Power Automate flow; it arrives from **Workflows** in their "Chat with Flow bot". If `finish` returns a sign-in warning (the sign-in can do more than read chats), show it exactly and ask whether to continue. Only if they say yes, call `finish` again with `accept_scopes: true`. If it says the pairing card didn't arrive, relay the flow checks it gives. If it says their organisation needs an admin to approve the sign-in, relay that and stop.
+3. Ask them to reply **hi** to the Away Mode bot in Teams (on the workflow route: in the chat with Workflows), then call `setup` with `step: "verify"`. If there's no reply yet, wait for them to confirm and verify again.
 4. When it says "Paired", tell them they're ready: when they step away, they can just say so (for example "going to lunch, back at 1:30").
 
 ## Rules

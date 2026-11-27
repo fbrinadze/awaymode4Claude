@@ -5,7 +5,46 @@ Away Mode needs three things in Microsoft 365, plus the plugin in Claude Code:
 - an Azure Bot, which is who sends the messages,
 - and a Teams app, which is where the chat lives.
 
-On Windows, **one command does all of it**. On macOS/Linux, or without Teams admin rights, follow the manual steps.
+This page covers the bot route, which needs a Teams admin. On Windows, **one command does all of it**. On macOS/Linux, follow the manual steps. **No Teams admin?** Use the [workflow route](#no-teams-admin-use-the-workflow-route).
+
+## No Teams admin? Use the workflow route
+
+Away Mode has two routes to Teams. The **bot route** (everything below this section) needs a Teams admin to add the app. The **workflow route** doesn't. Messages come from a small Power Automate flow that you make yourself, and replies are read with your own sign-in.
+
+**What it needs:**
+- No Teams admin and no Azure subscription.
+- Your organisation must let you register an app and use Power Automate.
+- Claude Code, and the [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-cli) (the installer uses it to register the sign-in app; it signs you in, no subscription needed). Bun too, which the Windows installer adds if it's missing.
+
+**1. Make the flow** at [make.powerautomate.com](https://make.powerautomate.com):
+1. Choose **Create**, then **Automated cloud flow**, then **Skip**.
+2. For the trigger, pick **When a Teams webhook request is received**. Set **Who can trigger the flow** to **Anyone**.
+3. Add the action **Post card in a chat or channel**. Set **Post as** to **Flow bot**, **Post in** to **Chat with Flow bot**, and **Recipient** to you.
+4. For **Adaptive Card**, use the expression `triggerBody()?['attachments']?[0]?['content']`.
+5. **Save**, then copy the trigger's **HTTP URL**.
+
+**2. Run the installer** (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup\install.ps1 -Route workflow
+```
+
+It registers a small sign-in app in your tenant, then asks for the URL. Paste it **only** into the installer prompt (it stays hidden) or into `/plugin` → Away Mode. The URL works like a password: anyone who has it can post into your chat. Never paste it into a Claude chat.
+
+**3. Pair.** Start Claude Code as shown in [Then: pair](#then-pair) and run `/away-mode:setup`. Setup sends a pairing card through your flow, then asks you to reply **hi** in the chat with **Workflows**.
+
+**macOS or Linux:** run `./setup/create-app.sh --workflow`. It creates the sign-in app and prints its app ID and your Tenant ID. Then install the plugin and set these under `/plugin` → Away Mode: **Teams route** = `workflow`, **Workflow URL**, **Sign-in app ID** and **Tenant ID**.
+
+**Notes for the workflow route:**
+- **Sign-in says "Need admin approval".** Your tenant blocks the consent. If Microsoft's Graph tools app is already approved there, rerun the installer with `-SignInApp graph-tools`. That app may carry more permissions than Away Mode needs. Setup shows you any extras before it pairs, and you can cancel.
+- **"Workflows" posts "I can't respond to messages" after every reply.** That note is Microsoft's, not Away Mode's. Ignore it.
+- **Who sends what.** Messages come from "Workflows". Each card says Claude Code and the project.
+- **Switching routes.** Rerun the installer with `-Route bot` or `-Route workflow`. Without `-Route`, it keeps the bot route if it finds your bot app, and otherwise asks.
+- The workflow route asks Microsoft for `User.Read` and `Chat.Read` only.
+
+---
+
+## Bot route
 
 ## What you need
 
@@ -13,7 +52,7 @@ On Windows, **one command does all of it**. On macOS/Linux, or without Teams adm
 - An Azure subscription. The bot uses the free F0 tier, and Away Mode deploys no web app, so nothing is billed.
 - Permission to create app registrations in Entra ID. Most tenants allow this by default.
 - Claude Code. [Bun](https://bun.sh) too, though the Windows installer installs it if it's missing.
-- For the Teams part: a Teams admin (or Global Administrator). Without one, see [Tenant notes](#tenant-notes).
+- For the Teams part: a Teams admin (or Global Administrator). Without one, use the [workflow route](#no-teams-admin-use-the-workflow-route), or see [Tenant notes](#tenant-notes).
 
 ## Windows: one command
 

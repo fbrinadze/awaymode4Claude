@@ -25,3 +25,10 @@ export function resolveUntil(a: Json, now: number, hours: number): number {
   if (a.until !== undefined) return Date.parse(String(a.until));
   return now + hours * 3_600_000;
 }
+
+/** A time people read at a glance: "6:30 PM" today, "Sat 9:00 AM" another day (en-US, local time). */
+export function clock(ms: number, now: number): string {
+  const d = new Date(ms);
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return d.toDateString() === new Date(now).toDateString() ? time : `${d.toLocaleDateString("en-US", { weekday: "short" })} ${time}`;
+}

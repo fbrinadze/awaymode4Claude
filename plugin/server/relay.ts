@@ -1,13 +1,15 @@
+import type { Kind } from "./adapters/adapter.ts";
 import type { Json } from "./mcp.ts";
 import { redact } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
+import { KIND_OF } from "./tools.ts";
 
 export interface RelayDeps {
   /** Tags each new permission, so only this server delivers its verdict. */
   instance: string;
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string): Promise<void>;
+  say(text: string, kind?: Kind, code?: string): Promise<void>;
   channel(content: string, meta: Record<string, string>): void;
   now(): number;
   waitMinutes: number;
@@ -56,7 +58,7 @@ export function normalise(text: string): string {
 
 export function createRelay(r: RelayDeps) {
   const terminalOnly = (tool: string, why: string) =>
-    r.say(`Terminal-only approval\n${tool} is waiting for approval at your terminal (it ${why}).`);
+    r.say(`Terminal-only approval\n${tool} is waiting for approval at your terminal (it ${why}).`, "approval");
 
   /** Relays a permission prompt to Teams, unless it matches never_relay. */
   async function onPermissionRequest(p: Json): Promise<void> {
@@ -71,7 +73,7 @@ export function createRelay(r: RelayDeps) {
     const needsMore = preview.length > PREVIEW_MAX;
     const description = clip(String(p.description ?? ""), DESC_MAX);
     const body = needsMore ? `Too long to show here: reply more ${id} to read it` : preview;
-    await r.say(`Permission needed\n${tool}: ${description}\n${body}\nReply "yes ${id}" or "no ${id}".`);
+    await r.say(`Permission needed\n${tool}: ${description}\n${body}\nReply "yes ${id}" or "no ${id}".`, "approval", needsMore ? undefined : preview);
     r.update((s) => void s.permissions.push({ id, tool, at: r.now(), instance: r.instance, preview, ...(needsMore && { needsMore }) }));
   }
 
@@ -91,7 +93,7 @@ export function createRelay(r: RelayDeps) {
     for (let i = 0; i < items.length; i++) {
       const m = items[i]!;
       try {
-        await r.say(`${HEADERS[m.type] ?? "Update"}\n${m.text}`);
+        await r.say(`${HEADERS[m.type] ?? "Update"}\n${m.text}`, KIND_OF[m.type] ?? "update");
       } catch (e) {
         const unsent = items.slice(i);
         r.update((s) => void (s.outbox = [...unsent, ...s.outbox]));

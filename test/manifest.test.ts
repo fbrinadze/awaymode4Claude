@@ -5,6 +5,10 @@ import { join } from "node:path";
 const read = (p: string) => JSON.parse(readFileSync(new URL(`../plugin/${p}`, import.meta.url), "utf8"));
 const BUN = "bun";
 
+test("manifest declares the Power Automate host", () => {
+  expect(read(".claude-plugin/plugin.json").network.hosts).toContain("*.environment.api.powerplatform.com");
+});
+
 // install.ps1 links bun.exe into WindowsApps (always on PATH), so a bare "bun" resolves.
 test("server and every hook run plain bun, with no bun_path setting", () => {
   const plugin = read(".claude-plugin/plugin.json");
@@ -39,10 +43,67 @@ test("listing metadata: https urls, icon, plugin README and LICENSE, size limits
   for (const f of files) expect(statSync(join(f.parentPath, f.name)).size).toBeLessThanOrEqual(256 * 1024);
 });
 
+test("manifest declares the three route settings in userConfig and env, workflow_url sensitive", () => {
+  const plugin = read(".claude-plugin/plugin.json");
+  expect(plugin.userConfig.teams_route).toMatchObject({ type: "string", default: "bot" });
+  expect(plugin.userConfig.workflow_url).toMatchObject({ type: "string", sensitive: true });
+  expect(plugin.userConfig.sign_in_app).toMatchObject({ type: "string" });
+  expect(plugin.mcpServers.away.env.AWAY_TEAMS_ROUTE).toBe("${user_config.teams_route}");
+  expect(plugin.mcpServers.away.env.AWAY_WORKFLOW_URL).toBe("${user_config.workflow_url}");
+  expect(plugin.mcpServers.away.env.AWAY_SIGN_IN_APP).toBe("${user_config.sign_in_app}");
+});
+
 test("sessions and reply_routing settings default safely and reach the server as env vars", () => {
   const plugin = read(".claude-plugin/plugin.json");
   expect(plugin.userConfig.sessions).toMatchObject({ type: "string", default: "several" });
   expect(plugin.userConfig.reply_routing).toMatchObject({ type: "string", default: "off" });
   expect(plugin.mcpServers.away.env.AWAY_SESSIONS).toBe("${user_config.sessions}");
   expect(plugin.mcpServers.away.env.AWAY_REPLY_ROUTING).toBe("${user_config.reply_routing}");
+});
+
+const setupText = (f: string) => readFileSync(new URL(`../setup/${f}`, import.meta.url), "utf8");
+
+test("install.ps1 has -Route with bot and workflow", () => {
+  const ps = setupText("install.ps1");
+  expect(ps).toContain('[ValidateSet("bot", "workflow")][string]$Route');
+  expect(ps).toContain("[string]$SignInApp");
+  expect(ps).toContain("--allow-no-subscriptions");
+  expect(ps).toContain("may carry more permissions than Away Mode needs");
+});
+
+test("create-app has a workflow mode without a secret", () => {
+  const ps = setupText("create-app.ps1");
+  expect(ps).toContain('[ValidateSet("bot", "workflow")][string]$Mode');
+  expect(ps).toContain("e1fe6dd8-ba31-4d61-89e7-88639da4683d");
+  expect(ps).toContain("f501c180-9344-439a-bca0-6cbf209fd270");
+  expect(setupText("create-app.sh")).toContain("--workflow");
+});
+
+test("installer keeps the bot route on re-run and sets teams_route for bot", () => {
+  const ps = setupText("install.ps1");
+  expect(ps).toContain('$settings.teams_route = "bot"');
+  expect(ps).toContain("displayName eq '$Name'");
+  expect(ps).toContain("keeping the bot route");
+});
+
+test("every setup .ps1 stays within 150 lines, with a stray-backtick-free install.ps1", () => {
+  for (const f of ["install.ps1", "install-workflow.ps1", "install-bot.ps1", "create-app.ps1"]) {
+    expect(setupText(f).split(/\r?\n/).length - 1).toBeLessThanOrEqual(150);
+  }
+  expect(setupText("install.ps1")).not.toContain("`,");
+});
+
+test("workflow URL must be https and is retried at most 3 times", () => {
+  const ps = setupText("install-workflow.ps1");
+  expect(ps).toContain("'^https://\\S+$'");
+  expect(ps).toContain("That doesn't look like the workflow's HTTPS URL");
+  expect(ps).toContain("1..3");
+});
+
+test("URL prompt is AsSecureString and never goes on a command line", () => {
+  const ps = setupText("install.ps1") + setupText("install-workflow.ps1");
+  expect(ps).toContain("Read-Host");
+  expect(ps).toContain("-AsSecureString");
+  expect(ps).toContain("workflow_url");
+  expect(ps).not.toMatch(/Write-Host[^\n]*\$workflowUrl/);
 });

@@ -2,7 +2,7 @@
 
 Step away from your desk and keep your Claude Code session moving. When Claude has a question, needs permission, finishes a task, or gets stuck, it messages you in **Microsoft Teams**. Your reply goes straight back into the session.
 
-> **Status: v1.1.0.** Stable on Windows with Microsoft Teams. It is built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview, so Claude Code needs a launch flag (see [Quick start](#quick-start)). See [CHANGELOG.md](CHANGELOG.md).
+> **Status: v1.2.0.** Stable on Windows with Microsoft Teams. It is built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview, so Claude Code needs a launch flag (see [Quick start](#quick-start)). See [CHANGELOG.md](CHANGELOG.md).
 
 ```text
 Away Mode                                        1:12 PM
@@ -103,7 +103,9 @@ Away Mode is free and runs on your computer. There is nothing to host.
 
 4. **Step away.** Say so in plain words, for example *"going to lunch, back at 1:30"*.
 
-Not a Teams admin, or on macOS or Linux? Use the [manual setup](#one-time-setup).
+**Two routes to Teams.** The **bot route** needs a Teams admin to add the Away Mode app. The **workflow route** doesn't: a small Power Automate flow that you make sends the messages, and your own sign-in reads your replies. No Teams admin and no Azure subscription. Run `setup\install.ps1 -Route workflow` and follow [No Teams admin? Use the workflow route](docs/SETUP.md#no-teams-admin-use-the-workflow-route). Without `-Route`, the installer asks.
+
+On macOS or Linux? Use the [manual setup](#one-time-setup).
 
 ## One-time setup
 
@@ -113,7 +115,7 @@ The installer does all of this on Windows. To do it by hand (about 10 minutes, w
 2. **Add the Teams app.** If your Teams allows it, go to **Apps → Manage your apps → Upload a custom app** and pick `away-mode-teams.zip`. Many organizations turn that off. Then an admin publishes the app, as described in [docs/SETUP.md](docs/SETUP.md#tenant-notes).
 3. **Install the plugin.** Run `/plugin marketplace add fbrinadze/awaymode4Claude`, then `/plugin install away-mode@awaymode`. Enter the three values under `/plugin` → Away Mode.
 
-Microsoft permissions requested (delegated, per user, no admin consent needed): `User.Read`, `Chat.Read` and `TeamsAppInstallation.ReadWriteSelfForUser`, plus the `offline_access` sign-in scope so you stay signed in. No tenant-wide or application Graph permissions are requested.
+Microsoft permissions requested (delegated, per user, no admin consent needed). Bot route: `User.Read`, `Chat.Read` and `TeamsAppInstallation.ReadWriteSelfForUser`. Workflow route: `User.Read` and `Chat.Read` only. Both add the `offline_access` sign-in scope so you stay signed in. No tenant-wide or application Graph permissions are requested.
 
 ### For organization admins
 
@@ -219,6 +221,9 @@ Change these under `/plugin` → Away Mode. The installer sets `sessions` and `r
 | `never_relay` | `rm -rf`, `git push --force`, `deploy` | Commands that can only be approved at the terminal. Teams tells you one is waiting but can't approve it |
 | `sessions` | `several` | `several`: each project can be away at once. `one`: going away in a project ends the previous one |
 | `reply_routing` | `off` | `on`: quoting a bot message sends your reply to that message's project. `off`: use `@project` |
+| `teams_route` | `bot` | `bot`: the Away Mode Teams app (needs a Teams admin). `workflow`: a Power Automate flow (no admin) |
+| `workflow_url` | none | Workflow route: the flow's HTTP URL. Sensitive: kept in your OS keychain |
+| `sign_in_app` | none | Workflow route: your sign-in app's ID, or `graph-tools` |
 | `tenant_id`, `bot_app_id`, `bot_secret` | none | Set by the installer. The secret is kept in your OS keychain |
 
 ## Security
@@ -226,7 +231,7 @@ Change these under `/plugin` → Away Mode. The installer sets `sessions` and `r
 - **Only you get through.** Messages are accepted only from the Microsoft account that paired with the bot. Everything else is dropped.
 - **Approvals are explicit.** Each approval covers one action. A bare `yes` works only when it can't be ambiguous.
 - **Secrets stay out of Teams.** Credential requests are blocked on the way out. Anything that looks like a key is blocked on the way in.
-- **Minimal access.** Three delegated Microsoft permissions, tokens kept in your OS keychain, nothing logged.
+- **Minimal access.** Three delegated Microsoft permissions on the bot route (two on the workflow route), tokens kept in your OS keychain, nothing logged.
 - **Small surface.** No runtime dependencies and no inbound network listener.
 
 See [PRIVACY.md](PRIVACY.md) for what leaves your machine. To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a public issue.

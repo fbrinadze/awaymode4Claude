@@ -1,8 +1,9 @@
-import type { Adapter, Msg } from "../plugin/server/adapters/adapter.ts";
+import type { Adapter, Msg, SendMeta } from "../plugin/server/adapters/adapter.ts";
 
 /** Records what the bot sends; tests queue inbound messages in `inbox`. */
 export class FakeAdapter implements Adapter {
   sent: string[] = [];
+  meta: SendMeta[] = [];
   inbox: Msg[] = [];
   private seq = 0;
 
@@ -11,9 +12,10 @@ export class FakeAdapter implements Adapter {
   /** Set to simulate Teams being unreachable. */
   failSends = false;
 
-  async send(text: string): Promise<void> {
+  async send(text: string, meta: SendMeta = {}): Promise<void> {
     if (this.failSends) throw new Error("Teams unreachable");
     this.sent.push(text);
+    this.meta.push(meta);
   }
 
   async poll(since: string): Promise<Msg[]> {
