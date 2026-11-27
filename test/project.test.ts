@@ -23,3 +23,14 @@ test("tags stay unique among away projects", () => {
   expect(tagFor(projectKey("/x/api"), s)).toBe("x/api");
   expect(tagFor(projectKey("/y/api"), s)).toBe("y/api");
 });
+
+test("a clashing parent/folder grows another path segment", () => {
+  const s = freshStore();
+  const away = (tag: string) => ({ ...freshProject(tag), awayUntil: 1 });
+  s.projects[projectKey("/a/x/app")] = away("app");
+  s.projects[projectKey("/b/x/app")] = away("app");
+  s.projects[projectKey("/c/y/app")] = away("app");
+  expect(tagFor(projectKey("/a/x/app"), s)).toBe("a/x/app");
+  expect(tagFor(projectKey("/b/x/app"), s)).toBe("b/x/app");
+  expect(tagFor(projectKey("/c/y/app"), s)).toBe("y/app");
+});

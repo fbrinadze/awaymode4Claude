@@ -19,6 +19,17 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - A session started in your home folder is shown as `home` in Teams.
 - **Upgrading from 1.0.x:** the bun_path setting is gone. If Away Mode can't start after updating, rerun setup\install.ps1 (it links Bun into WindowsApps) or fully restart your terminal app.
 
+### Fixed
+Loose ends from the final code review, each with a test that failed first:
+- When away mode runs out, or moves to another project, the session is told that its open Teams questions and approvals are cancelled, so it doesn't keep waiting for a reply that can't come.
+- If a session closes right after you return to the terminal, another session sends its recap and tidies up.
+- A lock left by a closed process is cleared at once, instead of making Away Mode wait and report "busy". The "welcome back" note shows only when away mode really ended.
+- Two projects whose folder and parent folder share names still get different `@` tags.
+- Questions parked at the end of the wait now appear under "Parked" in the recap.
+- Each `more` part fits in one Teams message, however long the project name, so nothing is cut off before you approve it.
+- A secret pasted for another project is held back before it's saved, not only before it reaches Claude.
+- The installer says to close Claude Code and rerun it when it can't refresh the Bun link.
+
 ### Security
 From the follow-up security audit (run-2):
 - Teams replies, answers and approvals reach only the session they were meant for (each session runs its own server; only one polls Teams, and only the owning server delivers).

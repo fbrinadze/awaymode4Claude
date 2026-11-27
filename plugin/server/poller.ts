@@ -1,11 +1,12 @@
 // The single Graph poller: whoever holds the lease fetches, dispatches and fills inboxes.
 import type { Adapter, Msg } from "./adapters/adapter.ts";
 import { dispatch, type Routed } from "./dispatch.ts";
-import { releaseLease, takeLease } from "./lease.ts";
+import { LEASE_MS, releaseLease, takeLease } from "./lease.ts";
 import { tagFor } from "./project.ts";
 import { endAway } from "./recap.ts";
 import type { Action } from "./route.ts";
-import { type Store, withStore } from "./store.ts";
+import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
+import { type ProjectState, type Store, withStore } from "./store.ts";
 
 export interface PollerDeps {
   dir: string;
@@ -55,6 +56,13 @@ export function drainInbox(dir: string, key: string, now: number): Action[] {
   });
 }
 
+/** A pasted secret is replaced before anything is stored or delivered (another project's inbox is on disk). */
+function held(r: Routed): Routed {
+  const a = r.action;
+  const secret = (a.kind === "answer" || a.kind === "instruction") && looksLikeSecret(a.text);
+  return secret ? { ...r, action: { kind: "prompt", text: HELD_BACK_TEXT } } : r;
+}
+
 /**
  * Cursor moves with the dispatch, in one write: a message is acted on at most once, and a
  * message at or before the cursor is skipped. Returns null for those; `local` is true when
@@ -65,20 +73,30 @@ function routeOne(d: PollerDeps, m: Msg): { r: Routed; local: boolean } | null {
   return withStore(d.dir, t, (s) => {
     if (m.at <= s.cursor) return null;
     s.cursor = m.at;
-    const r = dispatch(m, live(s, d, t), t, d.replyRouting ?? false);
+    const r = held(dispatch(m, live(s, d, t), t, d.replyRouting ?? false));
     const mine = (k: string) => k === d.key && s.projects[k]?.ownerInstance === d.instance;
     for (const k of r.targets) if (!mine(k)) s.projects[k]?.inbox.push({ action: r.action, at: m.at });
     return { r, local: !r.targets.length || r.targets.some(mine) };
   });
 }
 
-/** Projects whose time ran out are ended under the lock, so exactly one server sends each recap. */
+/** The recap a sweep sends for this project, if any: its time ran out, or its owner died after away ended. */
+function sweepOne(p: ProjectState, t: number): string | null {
+  if (p.awayUntil > 0 && p.awayUntil <= t) return endAway(p, "expired");
+  if (p.awayUntil !== 0 || !p.ownerInstance || t - p.ownerSeen <= LEASE_MS) return null;
+  if (!p.ended) return endAway(p, "terminal"); // the hook ended it; the owner never sent the recap
+  Object.assign(p, { ownerInstance: undefined, ended: undefined }); // recap already out; nobody left to tell
+  return null;
+}
+
+/** Ended under the lock, so exactly one server sends each recap. */
 export async function sweepExpired(d: PollerDeps): Promise<void> {
   const t = d.now();
   const recaps = withStore(d.dir, t, (s) =>
-    Object.entries(s.projects)
-      .filter(([, p]) => p.awayUntil > 0 && p.awayUntil <= t)
-      .map(([k, p]) => ({ tag: tagFor(k, s), text: endAway(p, "expired") })));
+    Object.entries(s.projects).flatMap(([k, p]) => {
+      const text = sweepOne(p, t);
+      return text === null ? [] : [{ tag: tagFor(k, s), text }];
+    }));
   for (const r of recaps) await d.announce(r.tag, r.text);
 }
 

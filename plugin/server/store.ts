@@ -1,6 +1,7 @@
 // state.json v2: shared fields plus one entry per project, written only under state.lock.
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { lock } from "./lock.ts";
 import type { Action } from "./route.ts";
 import type { Permission, Question } from "./state.ts";
 
@@ -30,6 +31,8 @@ export interface ProjectState {
   inbox: InboxItem[];
   lastSentAt: number;
   lastStopAt: number;
+  /** Ended by expiry or handover elsewhere: the owner still has to tell its Claude (ownerInstance is kept until then). */
+  ended?: "expired" | "handover";
 }
 export interface Store {
   version: 2;
@@ -40,11 +43,7 @@ export interface Store {
   projects: Record<string, ProjectState>;
 }
 
-export const LOCK_STALE_MS = 5_000;
-export const LOCK_WAIT_MS = 2_000;
-
-/** Another process held the lock for longer than LOCK_WAIT_MS. */
-export class StateBusy extends Error {}
+export { LOCK_STALE_MS, LOCK_WAIT_MS, StateBusy } from "./lock.ts";
 
 export const freshProject = (tag: string): ProjectState => ({
   tag, ownerSeen: 0, awayUntil: 0, awayStartedAt: 0, snoozeUntil: 0,
@@ -68,6 +67,7 @@ function project(v: unknown): ProjectState {
     awayUntil: num(p.awayUntil), awayStartedAt: num(p.awayStartedAt), snoozeUntil: num(p.snoozeUntil),
     questions: arr(p.questions, hasId), permissions: arr(p.permissions, hasId), outbox: arr(p.outbox),
     recap: arr(p.recap), inbox: arr(p.inbox), lastSentAt: num(p.lastSentAt), lastStopAt: num(p.lastStopAt),
+    ended: p.ended === "expired" || p.ended === "handover" ? p.ended : undefined,
   };
 }
 
@@ -107,25 +107,6 @@ export function readStore(dir: string, _now: number, migrateTo?: { key: string; 
     if (!idle(ps)) projects[k] = ps;
   }
   return { version: 2, me: str(v.me), cursor: str(v.cursor), nextQ: num(v.nextQ, 1), lease, projects };
-}
-
-function lock(dir: string): string {
-  const path = join(dir, "state.lock");
-  const give = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      closeSync(openSync(path, "wx"));
-      return path;
-    } catch {
-      try {
-        if (Date.now() - statSync(path).mtimeMs > LOCK_STALE_MS) rmSync(path, { force: true });
-      } catch {
-        // Gone between the open and the stat: retry at once.
-      }
-      if (Date.now() > give) throw new StateBusy("Away Mode state is busy; try again.");
-      Bun.sleepSync(50);
-    }
-  }
 }
 
 /** Lock, read, change, write (temp file, 0600, rename), unlock. */

@@ -9,8 +9,10 @@ export async function more(e: DeliverEnv, id: string): Promise<void> {
   if (!perm?.needsMore || perm.preview === undefined || (perm.instance !== undefined && perm.instance !== e.instance)) {
     return e.say("That request is no longer waiting.");
   }
-  const n = Math.ceil(perm.preview.length / MORE_PART);
+  // Each part must arrive whole: what's cut off at the cap would be approved unseen. "(5/5) " is the counter.
+  const size = Math.min(MORE_PART, (e.room ?? Infinity) - "(5/5) ".length);
+  const n = size > 0 ? Math.ceil(perm.preview.length / size) : Infinity;
   if (n > MORE_MAX_PARTS) return e.say("Too long for Teams. Approve it at the terminal.");
-  for (let i = 0; i < n; i++) await e.say(`(${i + 1}/${n}) ${perm.preview.slice(i * MORE_PART, (i + 1) * MORE_PART)}`);
+  for (let i = 0; i < n; i++) await e.say(`(${i + 1}/${n}) ${perm.preview.slice(i * size, (i + 1) * size)}`);
   e.update((s) => void (s.permissions.find((p) => p.id === id)!.moreSent = true));
 }

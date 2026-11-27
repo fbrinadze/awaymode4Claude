@@ -1,7 +1,7 @@
 // Away Mode hooks: PostToolUse (set_away), PreToolUse (AskUserQuestion), Stop, StopFailure, UserPromptSubmit.
 // No project imports: this runs on every hook event and must start fast. When no project is
 // away it exits without even reading stdin.
-import { closeSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 type Obj = Record<string, unknown>;
@@ -78,15 +78,27 @@ function read(file: string): Obj | null {
 }
 const projectsOf = (s: Obj | null): Record<string, Obj> => (s?.projects ?? {}) as Record<string, Obj>;
 
-/** Same protocol as the server's store lock: wx create, stale after 5 s, retry 50 ms up to 2 s. */
+/** The lock file holds its owner's pid. True when that process is gone (EPERM means alive). */
+function holderDead(path: string): boolean {
+  const pid = Number.parseInt(readFileSync(path, "utf8"), 10);
+  if (!(pid > 0)) return false; // Empty or unreadable: fall back to the age rule.
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
+/** Same protocol as the server's store lock: wx create with our pid, stale after 5 s or a dead holder, retry 50 ms up to 2 s. */
 function lock(path: string): boolean {
   for (let waited = 0; waited <= 2000; waited += 50) {
     try {
-      closeSync(openSync(path, "wx"));
+      writeFileSync(path, String(process.pid), { flag: "wx" });
       return true;
     } catch {
       try {
-        if (Date.now() - statSync(path).mtimeMs > 5000) unlinkSync(path);
+        if (holderDead(path) || Date.now() - statSync(path).mtimeMs > 5000) unlinkSync(path);
       } catch {
         // Lock vanished between the two calls: just retry.
       }
@@ -97,20 +109,21 @@ function lock(path: string): boolean {
 }
 
 /** Merge a patch into one project's entry under the lock; a missing entry is left alone. */
-function apply(dir: string, key: string, patch: Obj, append: string[] = []): void {
+function apply(dir: string, key: string, patch: Obj, append: string[] = []): boolean {
   const file = `${dir}/state.json`;
   const path = `${dir}/state.lock`;
-  if (!lock(path)) return; // Can't get the lock: skip rather than race the server.
+  if (!lock(path)) return false; // Can't get the lock: skip rather than race the server.
   try {
     const latest = read(file);
     const entry = projectsOf(latest)[key];
-    if (!latest || !entry) return;
+    if (!latest || !entry) return false;
     const merged = { ...entry, ...patch };
     for (const k of append) merged[k] = [...(Array.isArray(entry[k]) ? (entry[k] as unknown[]) : []), ...(patch[k] as unknown[])];
     const next = { ...latest, projects: { ...projectsOf(latest), [key]: merged } };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });
     renameSync(tmp, file);
+    return true;
   } finally {
     unlinkSync(path);
   }
@@ -129,7 +142,8 @@ if (import.meta.main) {
     }
     const key = projectKeyOf(input);
     const d = decide(input, projectsOf(state)[key] ?? null, now);
-    if (d.patch) apply(dir, key, d.patch, d.append);
-    if (d.stdout) await Bun.write(Bun.stdout, d.stdout);
+    // A skipped write (lock busy) means away mode is still on: don't announce "welcome back".
+    const wrote = d.patch ? apply(dir, key, d.patch, d.append) : true;
+    if (d.stdout && wrote) await Bun.write(Bun.stdout, d.stdout);
   }
 }

@@ -110,6 +110,7 @@ export function createRelay(r: RelayDeps) {
     r.update((s) => {
       late = s.questions.filter(overdue);
       s.questions = s.questions.filter((q) => !late.includes(q));
+      if (r.endOfDay === "park") for (const q of late) s.recap.push({ kind: "parked", text: `${q.id}: ${q.text}` });
     });
     const park = r.endOfDay === "park";
     // Tell Claude about every one first: that's local and can't fail, unlike Teams.

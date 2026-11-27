@@ -67,7 +67,7 @@ try {
     New-Item -ItemType HardLink -Path $bunLink -Target $bunPath -ErrorAction Stop | Out-Null
   }
 } catch {
-  Write-Warning "Bun wasn't linked; if Away Mode can't find Bun, fully restart your terminal app"
+  Write-Warning "Bun wasn't linked (bun.exe may be in use): close Claude Code and rerun this script; if Away Mode still can't find Bun, fully restart your terminal app"
 }
 if (-not (Test-Native { az account show })) {
   & az login | Out-Null

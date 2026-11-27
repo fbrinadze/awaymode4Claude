@@ -39,7 +39,7 @@ const INSTRUCTIONS = [
   "While away: ask questions with the ask tool instead of AskUserQuestion; when a task finishes, notify type=finished",
   "with a two or three line summary; when stuck or failing, notify type=error.",
   "Their messages arrive as channel events. kind=answer carries the question_id of an earlier ask;",
-  "kind=instruction is a new instruction from the user; kind=back means they ended away mode from Teams.",
+  "kind=instruction is a new instruction from the user; kind=back means away mode ended (from Teams, by time, or moved to another project): stop using ask and work at the terminal.",
   "Never ask for passwords, keys, tokens or other secrets through ask or notify. Tell the user to return to the terminal.",
 ].join(" ");
 
@@ -64,7 +64,9 @@ export function createAway(d: Deps) {
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
   const say = (text: string) => announce(d.project, text);
-  const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions };
+  const cancel = (r: "expired" | "handover") => channel(`Away mode ${r === "handover" ? "moved to another project" : "time ran out"}: `
+    + "questions and approvals still open in Teams are cancelled. Ask at the terminal.", { kind: "back" });
+  const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions, cancel };
   const end = (reason: EndReason) => endProject(life, reason);
   const poller = () => ({ dir: d.dir, key, instance, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, waitMinutes: d.waitMinutes, deliverLocal: (r: Routed) => act(r.action), announce });
 
@@ -80,6 +82,7 @@ export function createAway(d: Deps) {
     void (async () => {
       for (let on = true; on; ) {
         on = away();
+        if (!on) await sweepExpired(poller()).catch(fail("expiry")); // so the last pass sees its own expiry
         await drainMine().catch(fail("inbox"));
         if (on) await d.sleep(MIN_DELAY);
       }
@@ -115,17 +118,13 @@ export function createAway(d: Deps) {
     await say("Got it.");
   }
 
-  function channel(content: string, meta: Record<string, string>): void {
-    server.notify("notifications/claude/channel", { content, meta });
-  }
+  function channel(content: string, meta: Record<string, string>): void { server.notify("notifications/claude/channel", { content, meta }); }
 
-  async function onNotification(method: string, p: Json): Promise<void> {
-    if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p);
-  }
+  async function onNotification(method: string, p: Json): Promise<void> { if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p); }
 
   const act = makeAct({
     dir: d.dir, key, instance, now: d.now, hours: d.hours, current, update, say, channel, answer,
-    notify: (m, p) => server.notify(m, p), end,
+    notify: (m, p) => server.notify(m, p), end, room: CAP - `[Claude · ${d.project}] `.length,
   });
 
   const relay = createRelay({

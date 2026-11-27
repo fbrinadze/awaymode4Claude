@@ -150,3 +150,34 @@ test("the hook write keeps mode 0600 and takes the lock", async () => {
   expect(existsSync(lockFile)).toBe(false);
   if (process.platform !== "win32") expect(statSync(join(dir, "state.json")).mode & 0o777).toBe(0o600);
 });
+
+const runOut = async (dir: string, projectDir: string, input: object) => {
+  const p = Bun.spawn(["bun", "plugin/hooks/hook.ts"], {
+    env: { ...process.env, CLAUDE_PLUGIN_DATA: dir, CLAUDE_PROJECT_DIR: projectDir },
+    stdin: new Blob([JSON.stringify(input)]),
+    stdout: "pipe",
+  });
+  const out = await new Response(p.stdout).text();
+  await p.exited;
+  return out;
+};
+
+test("the hook breaks a fresh lock left by a dead process", async () => {
+  const a = key("/a");
+  const dir = seed({ [a]: { ...away(), awayUntil: Date.now() + 3_600_000 } });
+  const dead = Bun.spawn(["bun", "-e", "0"]);
+  await dead.exited;
+  writeFileSync(join(dir, "state.lock"), String(dead.pid));
+  const start = Date.now();
+  await runHook(dir, "/a", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  expect(Date.now() - start).toBeLessThan(1_800);
+  expect(JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).projects[a].awayUntil).toBe(0);
+});
+
+test("no welcome-back message when the state write was skipped (lock busy)", async () => {
+  const a = key("/a");
+  const dir = seed({ [a]: { ...away(), awayUntil: Date.now() + 3_600_000 } });
+  writeFileSync(join(dir, "state.lock"), String(process.pid)); // held by a live process
+  const out = await runOut(dir, "/a", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  expect(out).toBe("");
+});

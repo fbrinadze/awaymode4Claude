@@ -26,6 +26,8 @@ export interface DeliverEnv {
   answer(id: string, text: string): Promise<void>;
   /** End this project's away mode; returns the recap. */
   end(reason: EndReason): string;
+  /** Characters one `say` can carry after the project prefix, before the message cap cuts it. */
+  room?: number;
 }
 
 /** An away project whose owner hasn't been seen for LEASE_MS is taken over, pending permissions with it. */

@@ -7,7 +7,10 @@ export type EndReason = "expired" | "back" | "terminal" | "off" | "handover";
 const bullets = (title: string, lines: string[]): string[] => (lines.length ? [`${title}:`, ...lines.map((l) => `- ${l}`)] : []);
 const texts = (p: ProjectState, ...kinds: RecapItem["kind"][]) => p.recap.filter((r) => kinds.includes(r.kind)).map((r) => r.text);
 
-/** The recap text, then the project is left clean: nothing pending, no session, no owner, not away. */
+/**
+ * The recap text, then the project is left clean: nothing pending, no session, not away. After an
+ * expiry or handover the owner is kept (marked `ended`) so it can tell its own Claude; otherwise cleared.
+ */
 export function endAway(p: ProjectState, reason: EndReason): string {
   const text = [
     reason === "terminal" ? "You're back at the terminal." : `Away ended (${reason}).`,
@@ -16,7 +19,9 @@ export function endAway(p: ProjectState, reason: EndReason): string {
     ...bullets("Unanswered", p.questions.map((q) => `${q.id}: ${q.text}`)),
     ...bullets("Parked", texts(p, "parked")),
   ].join("\n");
-  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], ownerInstance: undefined, sessionId: undefined, awayUntil: 0, snoozeUntil: 0 });
+  const tell = (reason === "expired" || reason === "handover") && !!p.ownerInstance;
+  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], sessionId: undefined, awayUntil: 0, snoozeUntil: 0 });
+  Object.assign(p, tell ? { ended: reason } : { ownerInstance: undefined, ended: undefined });
   return text;
 }
 
@@ -26,7 +31,7 @@ export function startAway(s: Store, key: string, until: number, now: number, ins
   if (!p) throw new Error(`No project ${key}.`);
   const othersAway = Object.entries(s.projects).some(([k, o]) => k !== key && o.awayUntil > now);
   if (!othersAway) s.cursor = new Date(now).toISOString();
-  Object.assign(p, { permissions: [], questions: [], inbox: [], awayUntil: until, awayStartedAt: now, ownerInstance: instance, ownerSeen: now });
+  Object.assign(p, { permissions: [], questions: [], inbox: [], awayUntil: until, awayStartedAt: now, ownerInstance: instance, ownerSeen: now, ended: undefined });
 }
 
 export interface Life {
@@ -36,6 +41,8 @@ export interface Life {
   now(): number;
   /** "one": going away here ends every other away project (handover). */
   sessions?: "several" | "one";
+  /** Tell this server's Claude its away mode ended elsewhere (expiry or handover). */
+  cancel?: (reason: "expired" | "handover") => void;
 }
 
 /** set_away on for this server's project. Extending an away period keeps its pending items and cursor. Returns the handover notes to send. */
@@ -59,12 +66,21 @@ export function beginAway(l: Life, tag: string, until: number): string[] {
 export const endProject = (l: Life, reason: EndReason): string =>
   withStore(l.dir, l.now(), (s) => endAway(s.projects[l.key] ?? freshProject(""), reason));
 
-/** The hook cleared awayUntil but can't send: the owning server finishes the job. Null when there is nothing to end. */
+/**
+ * Away ended outside this server: the hook (terminal input) can't send, so the owner sends the recap;
+ * after an expiry or handover the recap is already out and the owner tells its Claude. Null when nothing to send.
+ */
 export function endedAtTerminal(l: Life): string | null {
-  const done = (p?: ProjectState) => !!p && p.awayUntil === 0 && p.ownerInstance === l.instance;
+  const done = (p?: ProjectState): p is ProjectState => !!p && p.awayUntil === 0 && p.ownerInstance === l.instance;
   if (!done(readStore(l.dir, l.now()).projects[l.key])) return null; // cheap unlocked look first
-  return withStore(l.dir, l.now(), (s) => {
+  const r = withStore(l.dir, l.now(), (s) => {
     const p = s.projects[l.key];
-    return p && p.awayUntil === 0 && p.ownerInstance === l.instance ? endAway(p, "terminal") : null;
+    if (!done(p)) return null;
+    if (!p.ended) return { recap: endAway(p, "terminal") };
+    const ended = p.ended;
+    Object.assign(p, { ownerInstance: undefined, ended: undefined });
+    return { ended };
   });
+  if (r?.ended) l.cancel?.(r.ended);
+  return r?.recap ?? null;
 }

@@ -18,6 +18,13 @@ test("server and every hook run plain bun, with no bun_path setting", () => {
   for (const c of commands) expect(c).toBe(BUN);
 });
 
+test("install.ps1 refreshes a stale bun link and tells the user what to do when it is locked", () => {
+  const ps = readFileSync(new URL("../setup/install.ps1", import.meta.url), "utf8");
+  expect(ps).toContain("$cur.LastWriteTime -ne $real.LastWriteTime");
+  expect(ps).toContain("Remove-Item $bunLink -Force -ErrorAction Stop");
+  expect(ps).toMatch(/close Claude Code and (run|rerun) this script/i);
+});
+
 test("listing metadata: https urls, icon, plugin README and LICENSE, size limits", () => {
   const plugin = read(".claude-plugin/plugin.json");
   for (const k of ["documentationUrl", "supportUrl", "privacyPolicyUrl"]) expect(plugin[k]).toMatch(/^https:\/\//);
