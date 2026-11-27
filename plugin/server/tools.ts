@@ -11,7 +11,7 @@ export interface Ctx {
   say(text: string): Promise<void>;
   startPolling(): void;
   /** A clean new away period (clears pending items, takes delivery ownership). */
-  startAway(until: number): void;
+  startAway(until: number): string[];
   /** End away mode and return the recap text. */
   endAway(reason: EndReason): string;
 }
@@ -127,7 +127,7 @@ export function makeTools(c: Ctx): Tool[] {
       if (!(until > now)) {
         throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
       }
-      c.startAway(until); // awayStartedAt lets the Stop hook end this turn without a "finished" note
+      for (const note of c.startAway(until)) await c.say(note); // awayStartedAt lets the Stop hook end this turn without a "finished" note
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },

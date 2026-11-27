@@ -24,8 +24,8 @@ export interface Deps {
   neverRelay?: string[];
   /** With no reply after waitMinutes: park the task, or continue safely. */
   endOfDay?: "park" | "safest";
-  /** This server's instance token (tests inject one). */
-  instance?: string;
+  instance?: string; // this server's instance token (tests inject one)
+  sessions?: "several" | "one"; replyRouting?: boolean; // "one" hands over between projects; replyRouting: a quoted reply picks its project
   now(): number;
   sleep(ms: number): Promise<void>;
   write(line: string): void;
@@ -68,9 +68,9 @@ export function createAway(d: Deps) {
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
   const say = (text: string) => announce(d.project, text);
-  const life = { dir: d.dir, key, instance, now: d.now };
+  const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions };
   const end = (reason: EndReason) => endProject(life, reason);
-  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, deliverLocal: (r: Routed) => act(r.action), announce });
+  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, deliverLocal: (r: Routed) => act(r.action), announce });
 
   function startPolling(): void {
     if (polling) return;

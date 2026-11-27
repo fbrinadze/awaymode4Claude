@@ -1,4 +1,5 @@
 // Clean away start and end (spec 5.6 R2/R3, 6.4): one place that resets a project's away state.
+import { tagFor } from "./project.ts";
 import { freshProject, type ProjectState, readStore, type RecapItem, type Store, withStore } from "./store.ts";
 
 export type EndReason = "expired" | "back" | "terminal" | "off" | "handover";
@@ -33,15 +34,24 @@ export interface Life {
   key: string;
   instance: string;
   now(): number;
+  /** "one": going away here ends every other away project (handover). */
+  sessions?: "several" | "one";
 }
 
-/** set_away on for this server's project. Extending an away period keeps its pending items and cursor. */
-export function beginAway(l: Life, tag: string, until: number): void {
+/** set_away on for this server's project. Extending an away period keeps its pending items and cursor. Returns the handover notes to send. */
+export function beginAway(l: Life, tag: string, until: number): string[] {
   const now = l.now();
-  withStore(l.dir, now, (s) => {
+  return withStore(l.dir, now, (s) => {
+    const notes: string[] = [];
+    if (l.sessions === "one") {
+      for (const [k, o] of Object.entries(s.projects)) {
+        if (k !== l.key && o.awayUntil > now) notes.push(`${tagFor(k, s)} handed over to ${tagFor(l.key, s)}\n${endAway(o, "handover")}`);
+      }
+    }
     const p = (s.projects[l.key] ??= freshProject(tag));
     if (p.awayUntil > now) Object.assign(p, { awayUntil: until, ownerInstance: l.instance, ownerSeen: now });
     else startAway(s, l.key, until, now, l.instance);
+    return notes;
   });
 }
 
