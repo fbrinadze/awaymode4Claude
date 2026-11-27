@@ -8,7 +8,11 @@ export class FakeAdapter implements Adapter {
 
   constructor(readonly user = "user-1") {}
 
+  /** Set to simulate Teams being unreachable. */
+  failSends = false;
+
   async send(text: string): Promise<void> {
+    if (this.failSends) throw new Error("Teams unreachable");
     this.sent.push(text);
   }
 

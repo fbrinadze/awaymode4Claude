@@ -5,6 +5,8 @@ export interface Question {
   id: string;
   text: string;
   options: string[];
+  /** Epoch ms the question was sent; drives the end-of-day timeout. */
+  askedAt?: number;
 }
 
 export interface Permission {
@@ -24,6 +26,16 @@ export interface State {
   nextQ: number;
   questions: Question[];
   permissions: Permission[];
+  /** Epoch ms Claude last reached the user via ask/notify (server acks don't count). */
+  lastSentAt: number;
+  /** Epoch ms of the last Stop the hook let through. */
+  lastStopAt: number;
+  /** Epoch ms away mode was last turned on. */
+  awayStartedAt: number;
+  /** Claude Code session that turned away mode on (set by the hook); other sessions are left alone. */
+  awaySession?: string;
+  /** Messages queued by hooks (which can't send) for the server to deliver on its next poll. */
+  outbox: { type: string; text: string }[];
 }
 
 export const fresh = (): State => ({
@@ -33,6 +45,10 @@ export const fresh = (): State => ({
   nextQ: 1,
   questions: [],
   permissions: [],
+  lastSentAt: 0,
+  lastStopAt: 0,
+  awayStartedAt: 0,
+  outbox: [],
 });
 
 export const isAway = (s: State, now: number): boolean => s.awayUntil > now;

@@ -19,6 +19,11 @@ const num = (v: string | undefined, fallback: number): number => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
+/** Comma-separated setting; unset falls back to the defaults, an explicit empty list means none. */
+const list = (v: string | undefined, fallback: string[]): string[] => {
+  if (v === undefined || v.includes("${")) return fallback;
+  return v.split(",").map((s) => s.trim()).filter(Boolean);
+};
 /** The folder name to show in Teams; none when Claude Code was started in the home folder. */
 const projectName = (dir: string): string => (resolve(dir) === resolve(homedir()) ? "" : basename(dir));
 /** An unset userConfig value may arrive empty or as the literal ${user_config.…} placeholder. */
@@ -57,6 +62,8 @@ const away = createAway({
   project: projectName(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
+  neverRelay: list(process.env.AWAY_NEVER_RELAY, ["rm -rf", "git push --force", "deploy"]),
+  endOfDay: setting(process.env.AWAY_END_OF_DAY_ACTION).toLowerCase() === "safest" ? "safest" : "park",
   now: Date.now,
   sleep: net.sleep,
   write: (line) => void process.stdout.write(line),

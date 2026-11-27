@@ -1,5 +1,7 @@
 import type { Json, Tool } from "./mcp.ts";
+import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
+import { resolveUntil } from "./when.ts";
 
 export interface Ctx {
   deps: { hours: number; now(): number };
@@ -22,45 +24,34 @@ function requireAway(c: Ctx): void {
 
 const obj = (properties: Json, required: string[]): Json => ({ type: "object", properties, required });
 
-const CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
-
-/**
- * End time in epoch ms, from the server's own clock and timezone. Claude knows the date but not
- * the time, so "for 30 minutes" and "back at 1:30" are resolved here. NaN means unusable.
- */
-export function resolveUntil(a: Json, now: number, hours: number): number {
-  if (typeof a.minutes === "number") return a.minutes > 0 ? now + a.minutes * 60_000 : NaN;
-  if (typeof a.at === "string") {
-    const m = CLOCK.exec(a.at.trim());
-    if (!m) return NaN;
-    let h = Number(m[1]);
-    const min = Number(m[2] ?? 0);
-    const ampm = m[3]?.toLowerCase();
-    if (ampm) h = (h % 12) + (ampm === "pm" ? 12 : 0);
-    if (h > 23 || min > 59) return NaN;
-    const d = new Date(now);
-    d.setHours(h, min, 0, 0);
-    // The next time the clock shows it: "back at 1:30" said at 2 PM means tomorrow.
-    if (d.getTime() <= now) d.setDate(d.getDate() + 1);
-    return d.getTime();
-  }
-  if (a.until !== undefined) return Date.parse(String(a.until));
-  return now + hours * 3_600_000;
+/** Away state, open questions and pending approvals, for `status` in Teams and the status tool. */
+export function statusText(s: State, now: number): string {
+  const until = isAway(s, now) ? `Away until ${new Date(s.awayUntil).toString()}` : "Not away";
+  const qs = s.questions.map((q) => `\n${q.id}: ${q.text}`).join("");
+  return `${until}. ${s.questions.length} open question(s), ${s.permissions.length} pending approval(s).${qs}`;
 }
 
 export function makeTools(c: Ctx): Tool[] {
+  /** Claude reached the user this turn; the Stop hook checks this. Server acks don't call it. */
+  const sent = () => c.update((s) => void (s.lastSentAt = c.deps.now()));
+
   const ask: Tool = {
     name: "ask",
-    description: "Ask the away user a question in Teams. Returns at once; the answer arrives later as a channel event with kind=answer and this question_id.",
+    description: "Ask the away user a question in Teams. Returns at once; the answer arrives later as a channel event with kind=answer and this question_id. Never ask for passwords, keys, codes or other secrets.",
     inputSchema: obj({ question: { type: "string" }, options: { type: "array", items: { type: "string" } } }, ["question"]),
     async run(a) {
       requireAway(c);
       const question = text(a.question, "question");
+      if (asksForSecret(question)) {
+        await c.say(SENSITIVE_TEXT);
+        sent();
+        return "Not sent: secrets can't be shared over Teams. The user was told to come back to the terminal; park anything that needs it.";
+      }
       const options = Array.isArray(a.options) ? a.options.map(String) : [];
       let id = "";
       c.update((s) => {
         id = `q${s.nextQ++}`;
-        s.questions.push({ id, text: question, options });
+        s.questions.push({ id, text: question, options, askedAt: c.deps.now() });
       });
       const how = options.length
         ? `Reply ${options.map((o, i) => `${i + 1} = ${o}`).join(", ")}, or type an answer.`
@@ -71,21 +62,32 @@ export function makeTools(c: Ctx): Tool[] {
         c.update((s) => void (s.questions = s.questions.filter((q) => q.id !== id)));
         throw e;
       }
+      sent();
       return `Sent as ${id}. The answer will arrive as a channel event with question_id="${id}".`;
     },
   };
 
   const notify: Tool = {
     name: "notify",
-    description: "Tell the away user something in Teams: type finished (task done, 2-3 lines), error (stuck or failing) or info.",
-    inputSchema: obj({ type: { type: "string", enum: Object.keys(HEADERS) }, text: { type: "string" } }, ["type", "text"]),
+    description:
+      "Tell the away user something in Teams: type finished (task done, 2-3 lines), error (stuck or failing), info, or sensitive (you need a secret: sends a fixed 'come back to the terminal' message, never the secret).",
+    inputSchema: obj({ type: { type: "string", enum: [...Object.keys(HEADERS), "sensitive"] }, text: { type: "string" } }, ["type", "text"]),
     async run(a) {
       requireAway(c);
       const type = String(a.type);
-      if (!Object.hasOwn(HEADERS, type)) throw new Error("type must be finished, error or info.");
-      await c.say(`${HEADERS[type]}\n${text(a.text, "text")}`);
+      if (type === "sensitive") await c.say(SENSITIVE_TEXT);
+      else if (Object.hasOwn(HEADERS, type)) await c.say(`${HEADERS[type]}\n${text(a.text, "text")}`);
+      else throw new Error("type must be finished, error, info or sensitive.");
+      sent();
       return "Sent.";
     },
+  };
+
+  const status: Tool = {
+    name: "status",
+    description: "Whether Away Mode is on, until when, and which questions and approvals are still open.",
+    inputSchema: obj({}, []),
+    run: async () => statusText(c.current(), c.deps.now()),
   };
 
   const setAway: Tool = {
@@ -108,13 +110,18 @@ export function makeTools(c: Ctx): Tool[] {
       }
       c.update((s) => {
         // Replies typed before going away aren't for us; extending keeps the cursor.
-        if (!isAway(s, now)) s.cursor = new Date(now).toISOString();
+        // A new away period: replies typed before it aren't for us, and last time's open questions are stale.
+        if (!isAway(s, now)) {
+          s.cursor = new Date(now).toISOString();
+          s.questions = [];
+        }
         s.awayUntil = until;
+        s.awayStartedAt = now; // the Stop hook lets this turn end without a "finished" note
       });
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },
   };
 
-  return [ask, notify, setAway];
+  return [ask, notify, setAway, status];
 }

@@ -129,7 +129,7 @@ Microsoft permissions requested (delegated, per user, no admin consent needed): 
 
 Typing anything in the terminal also ends away mode.
 
-**What you'll get in Teams:** questions, permission requests, a short note when a task finishes, and errors.
+**What you'll get in Teams:** questions, permission requests, a short note when a task finishes, and errors. While you're away, hooks make sure of it: Claude's terminal question dialog is redirected to Teams, Claude sends a summary before it stops, and API errors (like rate limits) are reported. Typing anything in the terminal turns away mode off and Claude lists what you missed.
 
 **How to reply:**
 
@@ -141,7 +141,7 @@ Typing anything in the terminal also ends away mode.
 | `#q2 use last month` | Answers an older question |
 | `status` / `back` | Shows progress, or ends away mode from your phone |
 
-**Passwords and keys never go through Teams.** If Claude needs one, the bot tells you to go back to your Claude Code session.
+**Passwords and keys never go through Teams.** If Claude needs one, the bot tells you to go back to your Claude Code session. A reply that looks like a key or token is held back, not passed to Claude.
 
 ## Configuration
 
@@ -152,7 +152,7 @@ Change these in `/config` at any time.
 | `away_hours` | `9` | How long away mode lasts when you don't say |
 | `end_of_day_action` | `park` | With no reply after `wait_minutes`: `park` pauses the task, `safest` continues with the safest option and tells you |
 | `wait_minutes` | `60` | How long to wait for a reply before `end_of_day_action` applies |
-| `never_relay` | `rm -rf`, `git push --force`, `deploy` | Commands that can only be approved at the terminal |
+| `never_relay` | `rm -rf`, `git push --force`, `deploy` | Commands that can only be approved at the terminal. Teams tells you one is waiting, but can't approve it |
 
 ## Security
 

@@ -1,9 +1,11 @@
 import type { Adapter, Msg } from "./adapters/adapter.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { pollLoop } from "./poll.ts";
+import { createRelay } from "./relay.ts";
+import { HELD_BACK_TEXT, looksLikeSecret, redact } from "./sensitive.ts";
 import { route, type Action } from "./route.ts";
 import { isAway, load, save, type State } from "./state.ts";
-import { type Ctx, makeTools } from "./tools.ts";
+import { type Ctx, makeTools, statusText } from "./tools.ts";
 
 export interface Deps {
   adapter: Adapter;
@@ -13,16 +15,19 @@ export interface Deps {
   project: string;
   hours: number;
   waitMinutes: number;
+  /** Patterns approved only at the terminal (never_relay). */
+  neverRelay?: string[];
+  /** With no reply after waitMinutes: park the task, or continue safely. */
+  endOfDay?: "park" | "safest";
   now(): number;
   sleep(ms: number): Promise<void>;
   write(line: string): void;
 }
 
 const CAP = 1200;
-const REQUEST_ID = /^[a-km-z]{5}$/;
 const INSTRUCTIONS = [
   "Away Mode relays to the user over Microsoft Teams while they are away from the terminal.",
-  "Use set_away when the user says they are stepping away (pass until as an ISO time if they gave one) or are back.",
+  "Use set_away when the user says they are stepping away (pass minutes, or at as the clock time they said; the server resolves it) or are back.",
   "While away: ask questions with the ask tool instead of AskUserQuestion; when a task finishes, notify type=finished",
   "with a two or three line summary; when stuck or failing, notify type=error.",
   "Their messages arrive as channel events. kind=answer carries the question_id of an earlier ask;",
@@ -52,7 +57,7 @@ export function createAway(d: Deps) {
 
   const away = () => isAway(current(), d.now());
   const say = (text: string) => {
-    const full = `[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`;
+    const full = redact(`[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`);
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
 
@@ -64,8 +69,10 @@ export function createAway(d: Deps) {
     });
   }
 
-  /** Cursor moves before handling: a message is acted on at most once. */
+  /** Timeouts first (so a late answer can't hit a closed question), then queued alerts, then replies. Cursor moves before handling: a message is acted on at most once. */
   async function pollOnce(): Promise<number> {
+    await relay.sweepTimeouts();
+    await relay.drainOutbox();
     const msgs = await d.adapter.poll(current().cursor);
     for (const m of msgs) {
       update((s) => {
@@ -81,6 +88,7 @@ export function createAway(d: Deps) {
   }
 
   async function act(a: Action): Promise<void> {
+    if ((a.kind === "answer" || a.kind === "instruction") && looksLikeSecret(a.text)) return say(HELD_BACK_TEXT);
     switch (a.kind) {
       case "drop":
         return;
@@ -94,7 +102,7 @@ export function createAway(d: Deps) {
         channel(a.text, { kind: "instruction" });
         return say("Got it, passing that to Claude.");
       case "status":
-        return say(statusText(current()));
+        return say(statusText(current(), d.now()));
       case "back":
         update((s) => void (s.awayUntil = 0));
         channel("The user ended away mode from Teams.", { kind: "back" });
@@ -116,18 +124,15 @@ export function createAway(d: Deps) {
     server.notify("notifications/claude/channel", { content, meta });
   }
 
-  function statusText(s: State): string {
-    const until = isAway(s, d.now()) ? `Away until ${new Date(s.awayUntil).toISOString()}` : "Not away";
-    return `${until}. ${s.questions.length} open question(s), ${s.permissions.length} pending approval(s).`;
+  async function onNotification(method: string, p: Json): Promise<void> {
+    if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p);
   }
 
-  async function onNotification(method: string, p: Json): Promise<void> {
-    if (method !== "notifications/claude/channel/permission_request") return;
-    const id = String(p.request_id ?? "");
-    if (!away() || !REQUEST_ID.test(id)) return;
-    await say(`Permission needed\n${p.tool_name}: ${p.description}\n${p.input_preview}\nReply "yes ${id}" or "no ${id}".`);
-    update((s) => void s.permissions.push({ id, tool: String(p.tool_name), at: d.now() }));
-  }
+  const relay = createRelay({
+    current, update, say, channel, now: d.now, waitMinutes: d.waitMinutes,
+    neverRelay: (d.neverRelay ?? []).map((p) => p.toLowerCase()),
+    endOfDay: d.endOfDay ?? "park",
+  });
 
   const ctx = { deps: d, current, update, say, startPolling };
   const server = createServer(
