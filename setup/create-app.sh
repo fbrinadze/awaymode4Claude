@@ -6,7 +6,31 @@
 # setup/teams-app/away-mode-teams.zip to upload in Teams.
 #
 # Usage: ./create-app.sh [name] [resource-group] [location]
+#        ./create-app.sh --workflow   (no-admin route: app registration only, no secret or bot)
 set -euo pipefail
+
+if [ "${1:-}" = "--workflow" ]; then
+  TENANT="$(az account show --query tenantId -o tsv)"
+  UPN="$(az account show --query user.name -o tsv)"
+  WF_NAME="Away Mode ($UPN)"
+  Q="'"
+  WF_ID="$(az ad app list --filter "displayName eq '${WF_NAME//$Q/$Q$Q}'" --query "[0].appId" -o tsv)"
+  if [ -n "$WF_ID" ]; then
+    az ad app update --id "$WF_ID" --is-fallback-public-client true >/dev/null
+  else
+    WF_ID="$(az ad app create --display-name "$WF_NAME" --sign-in-audience AzureADMyOrg \
+      --is-fallback-public-client true --query appId -o tsv)"
+  fi
+  if [ -z "$(az ad sp list --filter "appId eq '$WF_ID'" --query "[0].id" -o tsv)" ]; then
+    az ad sp create --id "$WF_ID" >/dev/null
+  fi
+  # Graph delegated User.Read and Chat.Read only. No secret, no bot, no Teams package.
+  az ad app permission add --id "$WF_ID" --api 00000003-0000-0000-c000-000000000000 \
+    --api-permissions e1fe6dd8-ba31-4d61-89e7-88639da4683d=Scope f501c180-9344-439a-bca0-6cbf209fd270=Scope >/dev/null
+  echo "Tenant ID: $TENANT"
+  echo "App ID:    $WF_ID"
+  exit 0
+fi
 
 NAME="${1:-away-mode}"
 RG="${2:-away-mode-rg}"

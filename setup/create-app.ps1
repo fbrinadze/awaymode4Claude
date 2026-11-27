@@ -14,13 +14,18 @@
   Without -PassThru it prints the three values to enter in Claude Code. With -PassThru (used by
   install.ps1) it prints no secret and returns them as an object instead.
 
+  -Mode workflow (the no-admin route): only a single-tenant public-client app "Away Mode (<your
+  user principal name>)" with delegated User.Read and Chat.Read. No secret, no Azure Bot, no Teams
+  package. Prints the Tenant ID and app ID, or returns them with -PassThru.
+
   Works in Windows PowerShell 5.1 and PowerShell 7.
 #>
 param(
   [string]$Name = "away-mode",
   [string]$ResourceGroup = "away-mode-rg",
   [string]$Location = "eastus",
-  [switch]$PassThru
+  [switch]$PassThru,
+  [ValidateSet("bot", "workflow")][string]$Mode = "bot"
 )
 $ErrorActionPreference = "Stop"
 
@@ -40,6 +45,31 @@ function Test-Az {
 
 $tenant = Invoke-Az account show --query tenantId -o tsv
 Write-Host "Tenant: $tenant"
+
+if ($Mode -eq "workflow") {
+  $upn = Invoke-Az account show --query user.name -o tsv
+  $wfName = "Away Mode ($upn)"
+  $wfFilter = "displayName eq '" + $wfName.Replace("'", "''") + "'"
+  $wfId = Invoke-Az ad app list --filter $wfFilter --query "[0].appId" -o tsv
+  if ($wfId) {
+    Invoke-Az ad app update --id $wfId --is-fallback-public-client true | Out-Null
+    Write-Host "App registration: $wfId (existing)"
+  } else {
+    $wfId = Invoke-Az ad app create --display-name $wfName --sign-in-audience AzureADMyOrg `
+      --is-fallback-public-client true --query appId -o tsv
+    Write-Host "App registration: $wfId (new)"
+  }
+  if (-not (Invoke-Az ad sp list --filter "appId eq '$wfId'" --query "[0].id" -o tsv)) {
+    Invoke-Az ad sp create --id $wfId | Out-Null
+  }
+  # Graph delegated User.Read and Chat.Read only (fixed IDs). Users consent at sign-in.
+  Invoke-Az ad app permission add --id $wfId --api "00000003-0000-0000-c000-000000000000" `
+    --api-permissions "e1fe6dd8-ba31-4d61-89e7-88639da4683d=Scope" "f501c180-9344-439a-bca0-6cbf209fd270=Scope" | Out-Null
+  if ($PassThru) { return [pscustomobject]@{ TenantId = $tenant; AppId = $wfId } }
+  Write-Host "Tenant ID: $tenant"
+  Write-Host "App ID:    $wfId"
+  return
+}
 
 # 1. One app registration: the bot's identity and the public client you sign in with.
 #    Public client flows on, so device-code sign-in works without the secret.

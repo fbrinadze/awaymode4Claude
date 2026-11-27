@@ -46,3 +46,29 @@ test("sessions and reply_routing settings default safely and reach the server as
   expect(plugin.mcpServers.away.env.AWAY_SESSIONS).toBe("${user_config.sessions}");
   expect(plugin.mcpServers.away.env.AWAY_REPLY_ROUTING).toBe("${user_config.reply_routing}");
 });
+
+const setupText = (f: string) => readFileSync(new URL(`../setup/${f}`, import.meta.url), "utf8");
+
+test("install.ps1 has -Route with bot and workflow", () => {
+  const ps = setupText("install.ps1");
+  expect(ps).toContain('[ValidateSet("bot", "workflow")][string]$Route');
+  expect(ps).toContain("[string]$SignInApp");
+  expect(ps).toContain("--allow-no-subscriptions");
+  expect(ps).toContain("may carry more permissions than Away Mode needs");
+});
+
+test("create-app has a workflow mode without a secret", () => {
+  const ps = setupText("create-app.ps1");
+  expect(ps).toContain('[ValidateSet("bot", "workflow")][string]$Mode');
+  expect(ps).toContain("e1fe6dd8-ba31-4d61-89e7-88639da4683d");
+  expect(ps).toContain("f501c180-9344-439a-bca0-6cbf209fd270");
+  expect(setupText("create-app.sh")).toContain("--workflow");
+});
+
+test("URL prompt is AsSecureString and never goes on a command line", () => {
+  const ps = setupText("install.ps1");
+  expect(ps).toContain("Read-Host");
+  expect(ps).toContain("-AsSecureString");
+  expect(ps).toContain("workflow_url");
+  expect(ps).not.toMatch(/Write-Host[^\n]*\$workflowUrl/);
+});

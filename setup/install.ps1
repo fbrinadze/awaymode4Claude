@@ -11,6 +11,11 @@
   Optional: -Sessions one (going away in a project hands over from the previous one; default
   several) and -ReplyRouting on (quoting a bot message in Teams routes to its project; default off).
 
+  -Route bot|workflow: bot needs a Teams admin to add the app; workflow (no admin) signs in with
+  your own small app registration and posts through a Power Automate Workflow URL you paste in.
+  -SignInApp <app id|graph-tools> skips creating that app (graph-tools = Microsoft's Graph
+  Command Line Tools app, only if your organisation blocks app registration).
+
   Safe to re-run. Needs the Azure CLI and Claude Code; installs Bun and the MicrosoftTeams
   PowerShell module if missing. The bot secret is never shown: it goes straight into Claude
   Code's settings (your OS keychain). Works in Windows PowerShell 5.1 and PowerShell 7.
@@ -21,12 +26,18 @@ param(
   [string]$ResourceGroup = "away-mode-rg",
   [string]$Location = "eastus",
   [ValidateSet("several", "one")][string]$Sessions = "several",
-  [ValidateSet("on", "off")][string]$ReplyRouting = "off"
+  [ValidateSet("on", "off")][string]$ReplyRouting = "off",
+  [ValidateSet("bot", "workflow")][string]$Route,
+  [string]$SignInApp
 )
 $ErrorActionPreference = "Stop"
 $plugin = "away-mode@awaymode"
 $launch = "claude --dangerously-load-development-channels plugin:$plugin"
 
+if (-not $Route) {
+  $admin = Read-Host "Do you have a Teams admin who can add the Away Mode app? (y/N)"
+  $Route = if ($admin -match '^(y|yes)$') { "bot" } else { "workflow" }
+}
 function Step($text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 # True/false for a native command. Windows PowerShell 5.1 turns redirected native stderr into a
@@ -70,11 +81,45 @@ try {
   Write-Warning "Bun wasn't linked (bun.exe may be in use): close Claude Code and rerun this script; if Away Mode still can't find Bun, fully restart your terminal app"
 }
 if (-not (Test-Native { az account show })) {
-  & az login | Out-Null
+  if ($Route -eq "workflow") { & az login --allow-no-subscriptions | Out-Null } else { & az login | Out-Null }
   if ($LASTEXITCODE -ne 0) { throw "az login failed." }
 }
 Write-Host "Azure CLI, Bun and Claude Code are ready."
 
+$settings = @{ sessions = $Sessions; reply_routing = $ReplyRouting }
+$graphWarning = "Microsoft's Graph tools app may carry more permissions than Away Mode needs in your organisation (anything already approved for it). Use your own app registration if you can."
+if ($Route -eq "workflow") {
+  # No admin route: your own app registration (or the Graph tools fallback) plus a workflow URL.
+  Step "Setting up the workflow route"
+  $tenant = (& az account show --query tenantId -o tsv | Out-String).Trim()
+  if ($SignInApp -eq "graph-tools") {
+    Write-Warning $graphWarning
+  } elseif ($SignInApp) {
+    Write-Host "Using sign-in app $SignInApp."
+  } else {
+    try {
+      $wf = @(& (Join-Path $PSScriptRoot "create-app.ps1") -Mode workflow -PassThru)[-1]
+      $SignInApp = $wf.AppId
+      $tenant = $wf.TenantId
+    } catch {
+      Write-Warning "Couldn't create the sign-in app: $($_.Exception.Message)"
+      Write-Host "Your organisation may block app registration. The fallback is Microsoft's Graph tools app:" -ForegroundColor Yellow
+      Write-Host "  $graphWarning"
+      throw "Stopped. Ask IT for an app registration, or rerun with -SignInApp graph-tools to accept the fallback."
+    }
+  }
+  Write-Host "Paste the Power Automate Workflow URL (it stays hidden, and goes straight into your OS keychain)."
+  $secureUrl = Read-Host "Workflow URL" -AsSecureString
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureUrl)
+  try { $workflowUrl = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
+  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+  if (-not $workflowUrl) { throw "No workflow URL entered." }
+  $settings.teams_route = "workflow"
+  $settings.sign_in_app = $SignInApp
+  $settings.tenant_id = $tenant
+  $settings.workflow_url = $workflowUrl
+}
+if ($Route -eq "bot") {
 # 2. Azure app registration, bot and Teams package (reused if they exist). The secret stays in $app.
 Step "Creating (or reusing) the Azure app and bot"
 $app = @(& (Join-Path $PSScriptRoot "create-app.ps1") -Name $Name -ResourceGroup $ResourceGroup -Location $Location -PassThru)[-1]
@@ -123,6 +168,10 @@ try {
   Write-Host "     Update-M365TeamsApp -Id $idText -AppInstallType UsersAndGroups -InstallForOperationType Add -InstallForUsers $($userIds -join ',') -InstallVersion $version"
   Write-Host "Carrying on with the Claude Code part."
 }
+$settings.tenant_id = $app.TenantId
+$settings.bot_app_id = $app.AppId
+$settings.bot_secret = $app.Secret
+}
 
 # 5. Claude Code plugin: install, then save the settings. The secret goes over stdin only,
 #    never on a command line, and Claude Code keeps it in your OS keychain.
@@ -139,14 +188,14 @@ if ($LASTEXITCODE -ne 0) { throw "Couldn't add or refresh the Away Mode marketpl
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to update it instead." }
 & claude plugin update $plugin
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
-@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; sessions = $Sessions; reply_routing = $ReplyRouting } |
-  ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
+$settings | ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }
-$app.Secret = $null
+$settings = $null; $workflowUrl = $null
+if ($app) { $app.Secret = $null }
 Write-Host "Plugin installed and configured."
 
 Step "All set"
 Write-Host "1. Start Claude Code with:"
 Write-Host "     $launch" -ForegroundColor Green
-Write-Host "2. Run /away-mode:setup: sign in with the code it shows, then reply hi to Away Mode in Teams."
+Write-Host "2. Run /away-mode:setup: sign in with the code it shows`, then reply hi to Away Mode in Teams."
 Write-Host "3. When you step away, just say so, for example: going to lunch, back at 1:30."
