@@ -86,7 +86,10 @@ test("a stale owner is adopted, permissions included", async () => {
   await i2.call("set_away", { on: true });
   await i1.call("set_away", { on: true });
   await request(i2);
-  h.clock.t += LEASE_MS + 1;
+  for (let waited = 0; waited <= LEASE_MS; waited += 10_000) {
+    h.clock.t += 10_000; // I2 keeps ticking, so it is awake; the owner stays silent
+    await i2.away.pollOnce();
+  }
   h.queue("late");
   await i2.away.pollOnce();
   expect(h.owner()).toBe("I2");
@@ -96,7 +99,24 @@ test("a stale owner is adopted, permissions included", async () => {
   expect(i2.verdicts().length).toBe(1);
 });
 
-test("a live owner is not adopted", async () => {
+test("after a laptop sleep a sibling does not steal the project", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  const y = h.mk("Y");
+  await y.call("set_away", { on: true });
+  await x.call("set_away", { on: true });
+  expect(h.owner()).toBe("X");
+  await y.away.pollOnce();
+  h.clock.t += 10 * 60_000; // everything slept
+  await y.away.pollOnce();
+  expect(h.owner()).toBe("X");
+  await x.away.pollOnce(); // the owner wakes and shows it is alive
+  h.clock.t += LEASE_MS - 1_000;
+  await y.away.pollOnce();
+  expect(h.owner()).toBe("X");
+});
+
+test("a live owner is not adopted",async () => {
   const h = pair();
   const i2 = h.mk("I2");
   const i1 = h.mk("I1");

@@ -3,6 +3,7 @@ import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
+import { LEASE_MS } from "./lease.ts";
 import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
@@ -43,7 +44,7 @@ const INSTRUCTIONS = [
 ].join(" ");
 
 export function createAway(d: Deps) {
-  let polling = false;
+  let polling = false, lastTick = d.now(), quietUntil = 0;
   const key = d.key ?? "default";
   const instance = d.instance ?? crypto.randomUUID();
 
@@ -89,7 +90,11 @@ export function createAway(d: Deps) {
   async function drainMine(): Promise<void> {
     const ended = endedAtTerminal(life);
     if (ended) await say(ended);
-    adopt(d.dir, key, instance, d.now());
+    // A process that slept woke up stale together with its owner: hold off adopting for one full lease.
+    const t = d.now();
+    if (t - lastTick > LEASE_MS) quietUntil = t + LEASE_MS;
+    lastTick = t;
+    if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
   }
 
