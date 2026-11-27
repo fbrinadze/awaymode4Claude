@@ -1,6 +1,7 @@
 // Per-project delivery: acting on a routed action, and which server instance owns delivery.
 import { LEASE_MS } from "./lease.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
+import { more } from "./more.ts";
 import { tagFor } from "./project.ts";
 import type { Action } from "./route.ts";
 import { isAway, type State } from "./state.ts";
@@ -68,8 +69,9 @@ async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Pr
 
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
   function verdict(a: Extract<Action, { kind: "verdict" }>): Promise<void> {
-    const owner = e.current().permissions.find((p) => p.id === a.id)?.instance;
-    if (owner !== undefined && owner !== e.instance) return e.say("That request is no longer waiting.");
+    const perm = e.current().permissions.find((p) => p.id === a.id);
+    if (perm?.instance !== undefined && perm.instance !== e.instance) return e.say("That request is no longer waiting.");
+    if (perm?.needsMore && !perm.moreSent) return e.say(`Read it first: more ${a.id}`);
     e.update((s) => void (s.permissions = s.permissions.filter((p) => p.id !== a.id)));
     e.notify("notifications/claude/channel/permission", { request_id: a.id, behavior: a.behavior });
     return e.say(a.behavior === "allow" ? "Approved." : "Denied.");
@@ -86,7 +88,7 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
         return e.say("Got it, passing that to Claude.");
       case "status": return e.say(statusText(e.current(), e.now()));
       case "extend": return extend(e, a);
-      case "more": return e.say("Coming soon.");
+      case "more": return more(e, a.id);
       case "snooze": case "unsnooze": return e.say("Coming soon."); // delivery lands in a later task
       case "back":
         e.update((s) => void (s.awayUntil = 0));

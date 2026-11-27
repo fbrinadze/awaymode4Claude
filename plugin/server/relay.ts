@@ -1,4 +1,5 @@
 import type { Json } from "./mcp.ts";
+import { redact } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
 
 export interface RelayDeps {
@@ -57,19 +58,21 @@ export function createRelay(r: RelayDeps) {
   const terminalOnly = (tool: string, why: string) =>
     r.say(`Terminal-only approval\n${tool} is waiting for approval at your terminal (it ${why}).`);
 
-  /** Relays a permission prompt to Teams, unless it matches never_relay or can't be shown whole. */
+  /** Relays a permission prompt to Teams, unless it matches never_relay. */
   async function onPermissionRequest(p: Json): Promise<void> {
     const id = String(p.request_id ?? "");
     if (!isAway(r.current(), r.now()) || !REQUEST_ID.test(id)) return;
     const tool = clip(String(p.tool_name ?? ""), TOOL_MAX);
-    const preview = String(p.input_preview ?? "");
-    const shown = normalise(`${tool}\n${p.description ?? ""}\n${preview}`);
+    const raw = String(p.input_preview ?? "");
+    const shown = normalise(`${tool}\n${p.description ?? ""}\n${raw}`);
     if (r.neverRelay.some((pattern) => shown.includes(normalise(pattern)))) return terminalOnly(tool, "matches never_relay");
-    // Never ask for approval of a command the user can't see in full.
-    if (preview.length > PREVIEW_MAX) return terminalOnly(tool, "is too long to show in Teams");
+    const preview = redact(raw);
+    // A long command is approvable only after `more <id>` has sent all of it.
+    const needsMore = preview.length > PREVIEW_MAX;
     const description = clip(String(p.description ?? ""), DESC_MAX);
-    await r.say(`Permission needed\n${tool}: ${description}\n${preview}\nReply "yes ${id}" or "no ${id}".`);
-    r.update((s) => void s.permissions.push({ id, tool, at: r.now(), instance: r.instance }));
+    const body = needsMore ? `Too long to show here: reply more ${id} to read it` : preview;
+    await r.say(`Permission needed\n${tool}: ${description}\n${body}\nReply "yes ${id}" or "no ${id}".`);
+    r.update((s) => void s.permissions.push({ id, tool, at: r.now(), instance: r.instance, preview, ...(needsMore && { needsMore }) }));
   }
 
   /** Sends what hooks queued (they can't reach Teams themselves). Taken in one update so nothing is sent twice; what couldn't be sent goes back. */
