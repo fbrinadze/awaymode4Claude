@@ -33,17 +33,21 @@ const KNOWN = [
   /-----BEGIN [A-Z ]+-----/, // PEM blocks
 ];
 
-/** A long run of mixed-case letters and digits, the shape of generated keys. */
-const randomLooking = (word: string): boolean =>
-  word.length >= 32 && /^[\w+/=-]+$/.test(word) && /\d/.test(word) && /[a-z]/.test(word) && /[A-Z]/.test(word);
+/**
+ * Runs of 32+ key characters anywhere in the text, so quotes, brackets or "key:" around a key
+ * don't hide it. Includes ~ and . for Microsoft Entra client secrets.
+ */
+const TOKEN = /[\w+/=~.-]{32,}/g;
+/** Mixed-case letters and digits: the shape of generated keys. */
+const randomLooking = (run: string): boolean => /\d/.test(run) && /[a-z]/.test(run) && /[A-Z]/.test(run);
 
 /** A reply that looks like a credential. Never passed to Claude. */
 export function looksLikeSecret(text: string): boolean {
-  return KNOWN.some((r) => r.test(text)) || text.split(/\s+/).some(randomLooking);
+  return KNOWN.some((r) => r.test(text)) || (text.match(TOKEN) ?? []).some(randomLooking);
 }
 
 /** Outgoing text with key- and token-shaped parts replaced, so a command or note can't carry one to Teams. */
 export function redact(text: string): string {
   const known = KNOWN.reduce((t, r) => t.replace(new RegExp(r.source, "g"), "[redacted]"), text);
-  return known.replace(/[\w+/=-]{32,}/g, (w) => (randomLooking(w) ? "[redacted]" : w));
+  return known.replace(TOKEN, (w) => (randomLooking(w) ? "[redacted]" : w));
 }

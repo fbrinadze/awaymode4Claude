@@ -2,6 +2,18 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.1] - 2026-11-27
+
+### Security
+Fixes from a source-review security audit. Each fix comes with a test that failed before it.
+- **A bare "yes" can no longer approve the wrong thing.** It counts only when exactly one request is open, no question is waiting, and the reply was sent after the request arrived. Otherwise Away Mode asks which one you meant.
+- **You always see what you're approving.** The description is capped so the command and the reply line always fit, and a command too long to show in Teams stays at the terminal.
+- **`never_relay` can't be dodged by respelling.** Spacing, quotes and flag order are normalised (`rm -fr`, `rm  -rf`, `rm -r -f`), and the tool name is checked too.
+- **Claude can't ask for a secret through `ask` options or `notify` text**, only the question was checked before. All of them now get the fixed "Sensitive request" message.
+- **Pasted keys are held back even when wrapped** in quotes, brackets, punctuation or `key:`, including Microsoft Entra secrets with `~` and `.`.
+- **Only Away Mode's own `set_away` can claim a session.** Another MCP server's tool, or a failed call, no longer moves away mode to a different session.
+- Hardening: the hooks ignore unreadable input instead of failing, and `setup/create-app.sh` shows the bot secret only on a live terminal, never in redirected output or CI logs.
+
 ## [1.0.0] - 2026-11-27
 
 First stable release: the same code as 0.3.1, declared stable after live testing on Windows with Microsoft Teams.

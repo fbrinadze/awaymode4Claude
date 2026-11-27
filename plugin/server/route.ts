@@ -30,19 +30,34 @@ export function oneEdit(a: string, b: string): boolean {
 }
 
 /**
+ * A bare yes/no names no request, so it's only safe when nothing else could be meant:
+ * exactly one request is open, no question is waiting for an answer, and the reply was
+ * sent after that request arrived. Otherwise ask the user to name it.
+ */
+function bareVerdict(verb: string, s: State, sentAt: number): Action | null {
+  const ids = s.permissions.map((p) => p.id);
+  if (!ids.length) return null;
+  const q = s.questions.at(-1);
+  const only = s.permissions[0]!;
+  if (ids.length === 1 && !q && sentAt > only.at) return null; // unambiguous: approve below
+  const orQuestion = q ? `, or #${q.id} ${verb} to answer ${q.id}` : "";
+  return { kind: "prompt", text: `Which one? Reply ${ids.map((i) => `${verb} ${i}`).join(" or ")}${orQuestion}` };
+}
+
+/**
  * `yes <id>` / `no <id>` for a live request (case and surrounding punctuation ignored).
- * A bare yes/no only when exactly one is open; with several, ask which. A near-miss ID
+ * A bare yes/no only when it can't be ambiguous (see bareVerdict). A near-miss ID
  * of exactly one live request is never approved: it asks for confirmation.
  */
-export function parseVerdict(text: string, s: State): Action | null {
+export function parseVerdict(text: string, s: State, sentAt: number): Action | null {
   if (/\?\s*$/.test(text)) return null; // "yes?" is doubt, not consent
-  const t =text.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").replace(/\s+/g, " ");
+  const t = text.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").replace(/\s+/g, " ");
   const behavior = /^y/i.test(t) ? "allow" : "deny";
   const m = VERDICT.exec(t);
   const ids = s.permissions.map((p) => p.id);
-  if (m && !m[2] && ids.length > 1) {
-    const verb = behavior === "allow" ? "yes" : "no";
-    return { kind: "prompt", text: `Which one? Reply ${ids.map((i) => `${verb} ${i}`).join(" or ")}` };
+  if (m && !m[2]) {
+    const ask = bareVerdict(behavior === "allow" ? "yes" : "no", s, sentAt);
+    if (ask) return ask;
   }
   const id = m?.[2]?.toLowerCase() ?? (ids.length === 1 ? ids[0] : undefined);
   if (m && id && ids.includes(id)) return { kind: "verdict", id, behavior };
@@ -82,7 +97,7 @@ export function route(msg: Msg, s: State): Action {
   // Verdicts first (PLAN.md). Commands beat plain answers so "back" always works from a phone;
   // the cost is that a bare "back" or "status" can't answer a question (use "#qN back").
   return (
-    parseVerdict(text, s) ??
+    parseVerdict(text, s, Date.parse(msg.at)) ??
     parseTargeted(text, s) ??
     parseCommand(text) ??
     answerLatest(text, s) ?? { kind: "instruction", text }

@@ -16,6 +16,9 @@ const NOTE_FIRST =
 const WELCOME_BACK =
   "The user is back at the terminal, so Away Mode is now off. Briefly list anything they missed while away: questions asked in Teams that are still open, approvals, and tasks you finished or parked.";
 
+/** This plugin's own tool. Another server's set_away must not move ownership. */
+const SET_AWAY = "mcp__plugin_away-mode_away__set_away";
+
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
 const isAway = (s: Obj | null, now: number): s is Obj => !!s && num(s.awayUntil) > now;
 
@@ -23,9 +26,11 @@ const isAway = (s: Obj | null, now: number): s is Obj => !!s && num(s.awayUntil)
 export function decide(input: Obj, state: Obj | null, now: number): Decision {
   if (!isAway(state, now)) return {};
   if (input.hook_event_name === "PostToolUse") {
-    // set_away just turned away mode on: this session owns it.
+    // Our set_away just turned away mode on: this session owns it.
     const on = (input.tool_input as Obj | undefined)?.on === true;
-    return on && typeof input.session_id === "string" ? { patch: { awaySession: input.session_id } } : {};
+    const failed = (input.tool_response as Obj | undefined)?.isError === true;
+    const ours = input.tool_name === SET_AWAY && !failed;
+    return ours && on && typeof input.session_id === "string" ? { patch: { awaySession: input.session_id } } : {};
   }
   // Away state is shared by every session on the machine; act only for the one that's away.
   if (typeof state.awaySession === "string" && input.session_id !== state.awaySession) return {};
@@ -67,7 +72,12 @@ if (import.meta.main) {
   const file = `${process.env.CLAUDE_PLUGIN_DATA ?? ""}/state.json`;
   const state = process.env.CLAUDE_PLUGIN_DATA ? await readState(file) : null;
   if (isAway(state, Date.now())) {
-    const input = JSON.parse((await Bun.stdin.text()).replace(/^﻿/, "") || "{}") as Obj;
+    let input: Obj = {};
+    try {
+      input = JSON.parse((await Bun.stdin.text()).replace(/^﻿/, "") || "{}") as Obj;
+    } catch {
+      // Unreadable hook input: do nothing rather than fail the user's tool call.
+    }
     const d = decide(input, state, Date.now());
     if (d.patch) {
       // ponytail: re-read just before writing to keep the race with the server to milliseconds;

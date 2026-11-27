@@ -215,3 +215,11 @@ test("notify sensitive sends the fixed text", async () => {
   await tool("notify", { type: "sensitive", text: "need the deploy key" });
   expect(fake.sent).toEqual([`[Claude · order-portal] ${SENSITIVE_TEXT}`]);
 });
+
+test("a secret request hidden in ask options or notify text gets the fixed text too", async () => {
+  await tool("set_away", { on: true });
+  await tool("notify", { type: "info", text: "Please send me your database password" });
+  await tool("ask", { question: "Which environment?", options: ["staging", "send me your API key"] });
+  expect(fake.sent).toEqual([`[Claude · order-portal] ${SENSITIVE_TEXT}`, `[Claude · order-portal] ${SENSITIVE_TEXT}`]);
+  expect(load(dir).questions).toEqual([]);
+});

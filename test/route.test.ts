@@ -8,7 +8,8 @@ const q = (id: string, options: string[] = []) => ({ id, text: "?", options });
 function state(over: Partial<State> = {}): State {
   return { ...fresh(), me: "u1", ...over };
 }
-const msg = (text: string, from = "u1") => ({ id: "m", from, text, at: "" });
+// Permissions arrive at epoch 0 (see perm), so replies default to a later time.
+const msg = (text: string, from = "u1", at = "2026-01-01T00:00:00Z") => ({ id: "m", from, text, at });
 
 test("sender gate: only the paired account gets through", () => {
   const s = state({ permissions: [perm("abcde")] });
@@ -42,9 +43,21 @@ test("an unknown or malformed ID is never an approval", () => {
   expect(route(msg("yes abcde please"), s).kind).not.toBe("verdict");
 });
 
-test("a verdict wins over an open question", () => {
+test("with a question also open, a bare yes asks which one instead of approving", () => {
   const s = state({ permissions: [perm("abcde")], questions: [q("q1", ["yes", "no"])] });
-  expect(route(msg("yes"), s)).toEqual({ kind: "verdict", id: "abcde", behavior: "allow" });
+  const r = route(msg("yes"), s);
+  expect(r.kind).toBe("prompt");
+  expect(JSON.stringify(r)).toContain("yes abcde");
+  expect(JSON.stringify(r)).toContain("#q1");
+  // Naming the request still works, and so does answering the question by number.
+  expect(route(msg("yes abcde"), s)).toEqual({ kind: "verdict", id: "abcde", behavior: "allow" });
+  expect(route(msg("#q1 yes"), s)).toEqual({ kind: "answer", questionId: "q1", text: "yes" });
+});
+
+test("a bare yes sent before the request arrived doesn't approve it", () => {
+  const s = state({ permissions: [{ id: "abcde", tool: "Bash", at: Date.parse("2026-01-01T00:00:10Z") }] });
+  expect(route(msg("yes", "u1", "2026-01-01T00:00:05Z"), s).kind).toBe("prompt");
+  expect(route(msg("yes", "u1", "2026-01-01T00:00:15Z"), s).kind).toBe("verdict");
 });
 
 test("text answers the newest open question", () => {

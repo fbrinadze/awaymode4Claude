@@ -73,13 +73,19 @@ rm -f "$HERE/away-mode-teams.zip"
 (cd "$STAGE" && zip -q "$HERE/away-mode-teams.zip" manifest.json color.png outline.png)
 rm -rf "$STAGE"
 
+# Show the secret only on a live terminal, so CI logs or redirected output never capture it.
+if [ -t 1 ]; then
+  SHOWN="$SECRET
+The secret is shown once. Claude Code keeps it in your OS keychain; don't paste it anywhere else."
+else
+  SHOWN="(not shown: output isn't a terminal. Run this again in a terminal to get a new one.)"
+fi
 cat <<EOF
 
 Done. Enter these in Claude Code when the Away Mode plugin asks:
   Tenant ID:   $TENANT
   Bot app ID:  $APP_ID
-  Bot secret:  $SECRET
-The secret is shown once. Claude Code keeps it in your OS keychain; don't paste it anywhere else.
+  Bot secret:  $SHOWN
 
 Then add the app in Teams: Apps > Manage your apps > Upload a custom app > $HERE/away-mode-teams.zip
 EOF

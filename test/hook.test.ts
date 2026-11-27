@@ -71,6 +71,14 @@ test("the session that turned away mode on is recorded as its owner", () => {
   expect(r).toEqual({ patch: { awaySession: "A" } });
 });
 
+test("only this plugin's own set_away can claim ownership", () => {
+  const owned = { ...away(), awaySession: "A" };
+  const post = (tool_name: string) => ({ hook_event_name: "PostToolUse", session_id: "B", tool_name, tool_input: { on: true } });
+  expect(decide(post("mcp__other__set_away"), owned, now)).toEqual({});
+  expect(decide(post("mcp__plugin_evil_away__set_away"), owned, now)).toEqual({});
+  expect(decide({ ...post("mcp__plugin_away-mode_away__set_away"), tool_response: { isError: true } }, owned, now)).toEqual({});
+});
+
 test("other sessions are left alone while one is away", () => {
   const owned = { ...away(), awaySession: "A", lastStopAt: now - 300_000 };
   expect(decide({ ...ask, session_id: "B" }, owned, now)).toEqual({});
