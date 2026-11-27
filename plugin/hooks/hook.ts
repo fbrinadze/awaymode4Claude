@@ -8,6 +8,8 @@ type Obj = Record<string, unknown>;
 export interface Decision {
   stdout?: string;
   patch?: Obj;
+  /** Patch keys whose arrays are appended to the entry's current array instead of replacing it. */
+  append?: string[];
 }
 
 const ASK_INSTEAD =
@@ -53,8 +55,8 @@ export function decide(input: Obj, project: Obj | null, now: number): Decision {
     }
     case "StopFailure": {
       const details = input.error_details ? ` (${input.error_details})` : "";
-      const outbox = Array.isArray(project.outbox) ? project.outbox : [];
-      return { patch: { outbox: [...outbox, { type: "error", text: `Claude stopped: ${input.error ?? "unknown error"}${details}` }] } };
+      // Appended to the outbox as re-read under the lock (see apply), not to this unlocked copy.
+      return { patch: { outbox: [{ type: "error", text: `Claude stopped: ${input.error ?? "unknown error"}${details}` }] }, append: ["outbox"] };
     }
     case "UserPromptSubmit":
       // Teams replies arrive as <channel> events; only the user typing here means they're back.
@@ -95,7 +97,7 @@ function lock(path: string): boolean {
 }
 
 /** Merge a patch into one project's entry under the lock; a missing entry is left alone. */
-function apply(dir: string, key: string, patch: Obj): void {
+function apply(dir: string, key: string, patch: Obj, append: string[] = []): void {
   const file = `${dir}/state.json`;
   const path = `${dir}/state.lock`;
   if (!lock(path)) return; // Can't get the lock: skip rather than race the server.
@@ -103,7 +105,9 @@ function apply(dir: string, key: string, patch: Obj): void {
     const latest = read(file);
     const entry = projectsOf(latest)[key];
     if (!latest || !entry) return;
-    const next = { ...latest, projects: { ...projectsOf(latest), [key]: { ...entry, ...patch } } };
+    const merged = { ...entry, ...patch };
+    for (const k of append) merged[k] = [...(Array.isArray(entry[k]) ? (entry[k] as unknown[]) : []), ...(patch[k] as unknown[])];
+    const next = { ...latest, projects: { ...projectsOf(latest), [key]: merged } };
     const tmp = `${file}.${process.pid}.tmp`;
     writeFileSync(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });
     renameSync(tmp, file);
@@ -125,7 +129,7 @@ if (import.meta.main) {
     }
     const key = projectKeyOf(input);
     const d = decide(input, projectsOf(state)[key] ?? null, now);
-    if (d.patch) apply(dir, key, d.patch);
+    if (d.patch) apply(dir, key, d.patch, d.append);
     if (d.stdout) await Bun.write(Bun.stdout, d.stdout);
   }
 }

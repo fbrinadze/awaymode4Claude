@@ -7,7 +7,7 @@ import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
 import { redact } from "./sensitive.ts";
-import { isAway, load, save, tagOf, type State } from "./state.ts";
+import { isAway, load, tagOf, type State, updateView } from "./state.ts";
 import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
@@ -55,13 +55,8 @@ export function createAway(d: Deps) {
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
   }
-  /** Load, change, save with no await in between, so concurrent handlers can't clobber state. */
-  function update(fn: (s: State) => void): State {
-    const s = current();
-    fn(s);
-    save(d.dir, s, key);
-    return s;
-  }
+  /** Read, change and write in one locked call, so hooks and other servers can't be clobbered. */
+  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), d.now() - d.waitMinutes * 60_000, fn);
   const away = () => isAway(current(), d.now());
   const announce = (name: string, text: string) => {
     const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);

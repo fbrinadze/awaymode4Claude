@@ -1,4 +1,4 @@
-import { freshProject, readStore, type RecapItem, withStore } from "./store.ts";
+import { freshProject, type ProjectState, readStore, type RecapItem, type Store, withStore } from "./store.ts";
 
 export interface Question {
   id: string;
@@ -73,29 +73,50 @@ export function setProject(key: string, tag: string): void {
 /** The tag a new entry for this key gets (only this server's own project has one). */
 export const tagOf = (key: string): string => (key === mine.key ? mine.tag : "");
 
+const viewOf = (s: Store, p: ProjectState): State => ({
+  awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
+  permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
+  awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
+  snoozeUntil: p.snoozeUntil, recap: p.recap,
+});
+
+/** Write a project's view into the (locked) store. */
+function putView(s: Store, key: string, tag: string, v: State): void {
+  Object.assign(s, { me: v.me, cursor: v.cursor, nextQ: v.nextQ });
+  const p = s.projects[key] ?? freshProject(tag);
+  s.projects[key] = {
+    ...p, tag: p.tag || tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
+    lastSentAt: v.lastSentAt, lastStopAt: v.lastStopAt, awayStartedAt: v.awayStartedAt,
+    sessionId: v.awaySession, outbox: v.outbox, snoozeUntil: v.snoozeUntil, recap: v.recap,
+  };
+}
+
+const meOf = (key: string) => ({ key, tag: key === mine.key ? mine.tag : "" });
+
 /** This project's view of state.json: shared pairing and cursor plus its own entry. Fails closed. */
 export function load(dir: string, key = mine.key): State {
-  const me = { key, tag: key === mine.key ? mine.tag : "" };
+  const me = meOf(key);
   const s = readStore(dir, Date.now(), me);
-  const p = s.projects[key] ?? freshProject(me.tag);
-  return {
-    awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
-    permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
-    awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
-    snoozeUntil: p.snoozeUntil, recap: p.recap,
-  };
+  return viewOf(s, s.projects[key] ?? freshProject(me.tag));
 }
 
 /** Write this project's view back under the lock (0600, temp file then rename). */
 export function save(dir: string, v: State, key = mine.key): void {
-  const me = { key, tag: key === mine.key ? mine.tag : "" };
-  withStore(dir, Date.now(), (s) => {
-    Object.assign(s, { me: v.me, cursor: v.cursor, nextQ: v.nextQ });
-    const p = s.projects[key] ?? freshProject(me.tag);
-    s.projects[key] = {
-      ...p, tag: p.tag || me.tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
-      lastSentAt: v.lastSentAt, lastStopAt: v.lastStopAt, awayStartedAt: v.awayStartedAt,
-      sessionId: v.awaySession, outbox: v.outbox, snoozeUntil: v.snoozeUntil, recap: v.recap,
-    };
+  const me = meOf(key);
+  withStore(dir, Date.now(), (s) => putView(s, key, me.tag, v), me);
+}
+
+/**
+ * Read this project's view, change it and write it back inside ONE lock, so a hook or another
+ * server's write can't be overwritten by a stale copy. Permissions older than `cutoff` are dropped.
+ */
+export function updateView(dir: string, key: string, now: number, cutoff: number, fn: (v: State) => void): State {
+  const me = meOf(key);
+  return withStore(dir, now, (s) => {
+    const v = viewOf(s, s.projects[key] ?? freshProject(me.tag));
+    v.permissions = v.permissions.filter((p) => p.at > cutoff);
+    fn(v);
+    putView(s, key, me.tag, v);
+    return v;
   }, me);
 }
