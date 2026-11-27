@@ -1,5 +1,12 @@
 # Away Mode for Claude Code
 
+[![CI](https://github.com/fbrinadze/awaymode4Claude/actions/workflows/ci.yml/badge.svg)](https://github.com/fbrinadze/awaymode4Claude/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/fbrinadze/awaymode4Claude)](https://github.com/fbrinadze/awaymode4Claude/releases)
+[![License](https://img.shields.io/github/license/fbrinadze/awaymode4Claude)](LICENSE)
+![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
+![Microsoft Teams](https://img.shields.io/badge/Microsoft%20Teams-6264A7?logo=microsoftteams&logoColor=white)
+[![Teams admin: not required](https://img.shields.io/badge/Teams%20admin-not%20required-success)](docs/SETUP.md)
+
 Step away from your desk and keep your Claude Code session moving. When Claude has a question, needs permission, finishes a task, or gets stuck, it messages you in **Microsoft Teams**. Your reply goes straight back into the session.
 
 > **Status: v1.2.0.** Stable on Windows with Microsoft Teams. It is built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview, so Claude Code needs a launch flag (see [Quick start](#quick-start)). See [CHANGELOG.md](CHANGELOG.md).
