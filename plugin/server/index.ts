@@ -75,7 +75,7 @@ const away = createAway({
   adapter,
   extraTools: (ctx) => [
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a), workflow: wf }),
-    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current }),
+    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current, route: routeCfg.route, workflowUrlSet: !!routeCfg.workflowUrl }),
   ],
   dir,
   key: projectKey(projectDir),

@@ -25,7 +25,8 @@
     "hosts": [
       "login.microsoftonline.com",
       "graph.microsoft.com",
-      "smba.trafficmanager.net"
+      "smba.trafficmanager.net",
+      "*.environment.api.powerplatform.com"
     ]
   },
   "mcpServers": {

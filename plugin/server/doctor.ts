@@ -5,6 +5,7 @@ import { loadTeams } from "./adapters/teams.ts";
 import type { Auth } from "./auth.ts";
 import { bearer, call, HttpError, type Net } from "./http.ts";
 import type { Tool } from "./mcp.ts";
+import { workflowLines } from "./doctor-workflow.ts";
 import { readStore } from "./store.ts";
 
 export interface DoctorDeps {
@@ -20,6 +21,10 @@ export interface DoctorDeps {
   version: string;
   bunVersion: string;
   current(): Adapter;
+  /** Which Teams route is configured; absent means the bot route. */
+  route?: "bot" | "workflow";
+  /** Only whether the workflow URL is set; the URL itself never reaches the doctor. */
+  workflowUrlSet?: boolean;
 }
 
 type Check = string | null; // null = fine, otherwise the fix
@@ -104,12 +109,11 @@ export function doctorTool(d: DoctorDeps): Tool {
       "Check Away Mode's setup and report one line per check with a fix for each failure. Works before setup. Pass send_test: true (only after the user agrees) to also send one test message to Teams.",
     inputSchema: { type: "object", properties: { send_test: { type: "boolean" } } },
     async run(a) {
+      const wf = d.route === "workflow";
       const out = [
         line("Bun", null, `Bun ${d.bunVersion}`),
         line("plugin version", null, `plugin version ${d.version}`),
-        settings(d),
-        ...(await graph(d)),
-        pairing(d),
+        ...(wf ? await workflowLines(d) : [settings(d), ...(await graph(d)), pairing(d)]),
         stateFile(d),
         ...leaseAndProjects(d),
       ];

@@ -5,6 +5,10 @@ import { join } from "node:path";
 const read = (p: string) => JSON.parse(readFileSync(new URL(`../plugin/${p}`, import.meta.url), "utf8"));
 const BUN = "bun";
 
+test("manifest declares the Power Automate host", () => {
+  expect(read(".claude-plugin/plugin.json").network.hosts).toContain("*.environment.api.powerplatform.com");
+});
+
 // install.ps1 links bun.exe into WindowsApps (always on PATH), so a bare "bun" resolves.
 test("server and every hook run plain bun, with no bun_path setting", () => {
   const plugin = read(".claude-plugin/plugin.json");
