@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { createAway } from "../plugin/server/away.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { endAway } from "../plugin/server/recap.ts";
+import { freshProject } from "../plugin/server/store.ts";
 import { fresh, load, save } from "../plugin/server/state.ts";
 import { FakeAdapter } from "./fake-adapter.ts";
 
@@ -188,13 +189,15 @@ test("an unanswered question parks the task after wait_minutes", async () => {
   expect(h.fake.sent.at(-1)).toContain("No reply");
 });
 
+const recapOf = (dir: string) => ({ ...freshProject("p"), recap: load(dir).recap });
+
 test("a parked question shows up under Parked in the recap", async () => {
   const h = harness();
   await h.tool("set_away", { on: true });
   await h.tool("ask", { question: "Include archived?" });
   h.clock.t = T + 61 * 60_000;
   await h.away.pollOnce();
-  expect(endAway(load(h.dir), "back")).toContain('Parked:\n- q1: Include archived?');
+  expect(endAway(recapOf(h.dir), "back")).toContain("Parked:\n- q1: Include archived?");
 });
 
 test("with safest, nothing is parked", async () => {
@@ -203,7 +206,7 @@ test("with safest, nothing is parked", async () => {
   await h.tool("ask", { question: "Include archived?" });
   h.clock.t = T + 61 * 60_000;
   await h.away.pollOnce();
-  expect(endAway(load(h.dir), "back")).not.toContain("Parked");
+  expect(endAway(recapOf(h.dir), "back")).not.toContain("Parked");
 });
 
 test("with safest, the timeout says to continue safely", async () => {
