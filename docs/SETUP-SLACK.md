@@ -6,9 +6,8 @@ Slack is an alternative to Teams: when both Slack tokens are set, Away Mode uses
 
 ## Before you start
 
-- You are a full member of the Slack workspace and can install apps there. **Guests can't install apps**: use a workspace you own (a free one works) or ask a member to install it.
+- You can create apps in your Slack workspace (or an admin does it for you).
 - Socket Mode apps can't be listed in the public Slack Marketplace, so each person or team creates their own app. One app allows up to 10 simultaneous connections.
-- Away Mode v0.2.0 or later: `claude plugin marketplace update awaymode`, then `claude plugin update away-mode`.
 
 ## Steps
 
@@ -16,7 +15,7 @@ Slack is an alternative to Teams: when both Slack tokens are set, Away Mode uses
 2. **Create the app-level token.** In the app, open Basic Information, App-Level Tokens, Generate Token and Scopes. Add the `connections:write` scope and generate it. This can only be done in the Slack UI. Copy the `xapp-` token.
 3. **Install to your workspace.** Open Install App and choose Install to Workspace. Copy the Bot User OAuth Token (`xoxb-`).
 4. **Store both tokens.** Run `claude plugin configure away-mode` and enter the Slack bot token and the Slack app-level token. They go to your OS keychain. Never paste them into a chat.
-5. **Restart Claude Code** with the channel on: `claude --dangerously-load-development-channels plugin:away-mode@awaymode` (or `claude --channels plugin:away-mode@awaymode` if your organization has approved the plugin).
+5. **Restart Claude Code** with the channel on: `claude --channels plugin:away-mode@awaymode`.
 6. **Pair.** Run `/away-mode:setup`. Claude shows a 6-digit code. In Slack, open the Away Mode app (Apps, Away Mode, Messages tab) and send it the code as a DM. Claude confirms with "Paired", and the bot DMs you "Paired".
 
 The code is valid for 10 minutes and works once. Away Mode records only your Slack user ID.
