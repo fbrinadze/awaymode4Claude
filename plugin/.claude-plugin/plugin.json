@@ -10,6 +10,10 @@
   "homepage": "https://github.com/fbrinadze/awaymode4Claude",
   "repository": "https://github.com/fbrinadze/awaymode4Claude",
   "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/fbrinadze/awaymode4Claude#readme",
+  "supportUrl": "https://github.com/fbrinadze/awaymode4Claude/issues",
+  "privacyPolicyUrl": "https://github.com/fbrinadze/awaymode4Claude/blob/main/PRIVACY.md",
   "keywords": [
     "teams",
     "notifications",
