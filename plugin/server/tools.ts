@@ -1,3 +1,4 @@
+import type { Kind } from "./adapters/adapter.ts";
 import type { Json, Tool } from "./mcp.ts";
 import type { EndReason } from "./recap.ts";
 import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
@@ -8,7 +9,7 @@ export interface Ctx {
   deps: { hours: number; now(): number };
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string): Promise<void>;
+  say(text: string, kind?: Kind): Promise<void>;
   startPolling(): void;
   /** A clean new away period (clears pending items, takes delivery ownership). */
   startAway(until: number): string[];
@@ -17,6 +18,8 @@ export interface Ctx {
 }
 
 const HEADERS: Record<string, string> = { finished: "Done", error: "Error", info: "Update" };
+/** The adapter-facing kind of each notify type. */
+export const KIND_OF: Record<string, Kind> = { finished: "done", error: "error", info: "update" };
 
 function text(v: unknown, name: string): string {
   if (typeof v !== "string" || !v.trim()) throw new Error(`${name} is required.`);
@@ -66,7 +69,7 @@ export function makeTools(c: Ctx): Tool[] {
         ? `Reply ${options.map((o, i) => `${i + 1} = ${o}`).join(", ")}, or type an answer.`
         : "Reply with your answer.";
       try {
-        await c.say(`Question ${id}\n${question}\n${how}`);
+        await c.say(`Question ${id}\n${question}\n${how}`, "question");
       } catch (e) {
         c.update((s) => void (s.questions = s.questions.filter((q) => q.id !== id)));
         throw e;
@@ -93,7 +96,7 @@ export function makeTools(c: Ctx): Tool[] {
           sent();
           return "Held for the user's recap: they snoozed Teams. Questions, approvals and errors still go through.";
         }
-        await c.say(`${HEADERS[type]}\n${body}`);
+        await c.say(`${HEADERS[type]}\n${body}`, KIND_OF[type]);
       } else throw new Error("type must be finished, error, info or sensitive.");
       sent();
       return "Sent.";
@@ -120,14 +123,14 @@ export function makeTools(c: Ctx): Tool[] {
       if (a.on !== true) {
         const wasAway = isAway(c.current(), now);
         const recap = c.endAway("off");
-        if (wasAway) await c.say(recap);
+        if (wasAway) await c.say(recap, "recap");
         return "Away mode off.";
       }
       const until = resolveUntil(a, now, c.deps.hours);
       if (!(until > now)) {
         throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
       }
-      for (const note of c.startAway(until)) await c.say(note); // awayStartedAt lets the Stop hook end this turn without a "finished" note
+      for (const note of c.startAway(until)) await c.say(note, "recap"); // awayStartedAt lets the Stop hook end this turn without a "finished" note
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },

@@ -1,4 +1,5 @@
 // Per-project delivery: acting on a routed action, and which server instance owns delivery.
+import type { Kind } from "./adapters/adapter.ts";
 import { LEASE_MS } from "./lease.ts";
 import type { EndReason } from "./recap.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
@@ -20,7 +21,7 @@ export interface DeliverEnv {
   hours: number;
   current(): State;
   update(fn: (s: State) => void): State;
-  say(text: string): Promise<void>;
+  say(text: string, kind?: Kind): Promise<void>;
   notify(method: string, params: Record<string, unknown>): void;
   channel(content: string, meta: Record<string, string>): void;
   answer(id: string, text: string): Promise<void>;
@@ -123,7 +124,7 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
       case "snooze": case "unsnooze": return snooze(e, a);
       case "back":
         e.channel("The user ended away mode from Teams.", { kind: "back" });
-        return e.say(e.end("back"));
+        return e.say(e.end("back"), "recap");
     }
   };
 }

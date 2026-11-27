@@ -81,7 +81,7 @@ export function setupTool(d: SetupDeps): Tool {
       s.me = me;
       s.cursor = new Date(now).toISOString();
     });
-    await d.ctx.say("Away Mode is connected to your Claude Code session. Reply hi to finish pairing.");
+    await d.ctx.say("Away Mode is connected to your Claude Code session. Reply hi to finish pairing.", "setup");
     return 'Test message sent in Teams. Ask the user to reply "hi" in the Away Mode chat, then call setup with step "verify".';
   }
 
@@ -94,7 +94,7 @@ export function setupTool(d: SetupDeps): Tool {
     if (!msgs.some((m) => m.from === s.me)) {
       return 'No reply yet. Ask the user to reply "hi" in the Away Mode chat in Teams, then call setup with step "verify" again.';
     }
-    await d.ctx.say("Paired. While you're away, Claude's questions will come here.");
+    await d.ctx.say("Paired. While you're away, Claude's questions will come here.", "setup");
     return 'Paired. Away Mode is ready. Tell the user to say when they step away (for example "going to lunch, back at 1:30").';
   }
 
