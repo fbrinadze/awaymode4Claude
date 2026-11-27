@@ -35,7 +35,8 @@ export function oneEdit(a: string, b: string): boolean {
  * of exactly one live request is never approved: it asks for confirmation.
  */
 export function parseVerdict(text: string, s: State): Action | null {
-  const t = text.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").replace(/\s+/g, " ");
+  if (/\?\s*$/.test(text)) return null; // "yes?" is doubt, not consent
+  const t =text.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "").replace(/\s+/g, " ");
   const behavior = /^y/i.test(t) ? "allow" : "deny";
   const m = VERDICT.exec(t);
   const ids = s.permissions.map((p) => p.id);

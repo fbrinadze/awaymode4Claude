@@ -79,6 +79,11 @@ test("surrounding punctuation, whitespace and case still approve", () => {
   for (const t of ["yes abcde.", " YES  abcde ", "yes abcde!", "(yes abcde)"]) expect(route(msg(t), s)).toEqual(ok);
 });
 
+test("a hedged reply ending in ? never approves", () => {
+  const s = state({ permissions: [perm("abcde")] });
+  for (const t of ["yes?", "yes abcde?", "no?"]) expect(route(msg(t), s).kind).not.toBe("verdict");
+});
+
 test("a near-miss ID is never approved; it asks for confirmation", () => {
   const s = state({ permissions: [perm("abcde")] });
   for (const t of ["yes abcdf", "yes abcd", "yes abcdef", "yes bacde", "yes abcle"]) {
