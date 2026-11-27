@@ -2,13 +2,11 @@ import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
-import { slackAdapter, type WebSocketLike } from "./adapters/slack.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
 import { createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import type { Net } from "./http.ts";
 import { secretStore } from "./secrets.ts";
-import { loadSlack, pickPlatform, setupSlackTool } from "./setup-slack.ts";
 import { setupTool } from "./setup.ts";
 
 const fail = async (): Promise<never> => {
@@ -46,28 +44,9 @@ const auth =
     ? createAuth({ tenantId, clientId: botId, botSecret }, net, secretStore(dir), Date.now)
     : null;
 
-// Swappable so a successful setup switches platform without a restart.
-const slackOn = pickPlatform(process.env) === "slack";
-let slack: ReturnType<typeof slackAdapter> | null = null;
-/** (Re)open the Slack connection for this user; "" while unpaired. Socket Mode only dials out. */
-const startSlack = (me: string): Adapter => {
-  slack?.stop();
-  const a = slackAdapter(
-    { botToken: setting(process.env.AWAY_SLACK_BOT_TOKEN), appToken: setting(process.env.AWAY_SLACK_APP_TOKEN), me },
-    net,
-    (u) => new WebSocket(u) as unknown as WebSocketLike, // DOM typings differ in handler arity only
-  );
-  a.start().catch((e) => console.error("away-mode: Slack connection failed:", String(e)));
-  return (slack = a);
-};
-process.on("exit", () => slack?.stop());
-
+// Swappable so a successful setup switches to Teams without a restart.
 const saved = loadTeams(dir);
-let current: Adapter = slackOn
-  ? startSlack(loadSlack(dir)?.me ?? "")
-  : auth && saved
-    ? teamsAdapter(dir, saved, auth, net)
-    : notSetUp;
+let current: Adapter = auth && saved ? teamsAdapter(dir, saved, auth, net) : notSetUp;
 const adapter: Adapter = {
   send: (text) => current.send(text),
   poll: (since) => current.poll(since),
@@ -77,17 +56,7 @@ const adapter: Adapter = {
 const away = createAway({
   adapter,
   extraTools: (ctx) => [
-    slackOn
-      ? setupSlackTool({
-          ctx,
-          dir,
-          // Pairing reads code-shaped DMs from anyone; poll stays gated on the paired user.
-          readDms: async (since) => (slack ? slack.pairDms(since) : []),
-          // The adapter DMs its paired user; use() below has already switched to that user when this runs.
-          send: (_to, text) => current.send(text),
-          use: (me) => (current = startSlack(me)),
-        })
-      : setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
+    setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
   ],
   dir,
   project: projectName(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
