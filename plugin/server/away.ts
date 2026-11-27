@@ -95,8 +95,8 @@ export function createAway(d: Deps) {
       case "instruction":
         channel(a.text, { kind: "instruction" });
         return say("Got it, passing that to Claude.");
-      case "status":
-        return say(statusText(current(), d.now()));
+      case "status": return say(statusText(current(), d.now()));
+      case "extend": case "snooze": case "unsnooze": case "more": return say("Coming soon."); // delivery lands in a later task
       case "back":
         update((s) => void (s.awayUntil = 0));
         channel("The user ended away mode from Teams.", { kind: "back" });

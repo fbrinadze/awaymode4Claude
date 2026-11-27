@@ -1,7 +1,8 @@
 // Which away project(s) an inbound Teams message is for (spec 5.5). Pure: no I/O.
 import type { Msg } from "./adapters/adapter.ts";
 import { tagFor } from "./project.ts";
-import { parseCommand, parseTargeted, parseVerdict, routeProject, type Action } from "./route.ts";
+import { parseCommand } from "./commands.ts";
+import { parseTargeted, parseVerdict, routeProject, type Action } from "./route.ts";
 import { fresh, type State } from "./state.ts";
 import type { Store } from "./store.ts";
 
@@ -65,6 +66,10 @@ export function dispatch(msg: Msg, s: Store, now: number): Routed {
   const a = parseVerdict(text, all, sentAt) ?? parseTargeted(text, all);
   if (a) return a.kind === "prompt" ? { targets: [], action: a } : { targets: [owner(a, s, away)!], action: a };
   const cmd = parseCommand(text);
+  if (cmd?.kind === "more") {
+    const key = ownerOf(s, away, (k) => s.projects[k]!.permissions.some((p) => p.id === cmd.id));
+    return key ? { targets: [key], action: cmd } : prompt(`No request ${cmd.id} is waiting.`);
+  }
   if (cmd) return { targets: away, action: cmd };
   if (away.length === 1) return { targets: away, action: routeProject(text, all, sentAt) };
   return plain(text, s, away);

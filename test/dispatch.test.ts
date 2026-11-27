@@ -77,3 +77,15 @@ test("plain text: one open question answers it, none prompts", () => {
 test("only one project away: plain text is an instruction, as in v1.0.1", () => {
   expect(dispatch(msg("rerun"), store(A), NOW)).toEqual({ targets: [A], action: { kind: "instruction", text: "rerun" } });
 });
+
+test("untagged extend targets every away project; @tag only that one", () => {
+  expect(dispatch(msg("extend 1h"), store(), NOW)).toEqual({ targets: [A, B], action: { kind: "extend", minutes: 60 } });
+  expect(dispatch(msg("@a extend 1h"), store(), NOW)).toEqual({ targets: [A], action: { kind: "extend", minutes: 60 } });
+});
+
+test("more <id> targets the project holding that request; unknown id prompts", () => {
+  const s = store();
+  s.projects[B]!.permissions.push(perm("kpqrs"));
+  expect(dispatch(msg("more kpqrs"), s, NOW)).toEqual({ targets: [B], action: { kind: "more", id: "kpqrs" } });
+  expect(dispatch(msg("more zzzzz"), s, NOW)).toEqual({ targets: [], action: { kind: "prompt", text: "No request zzzzz is waiting." } });
+});

@@ -1,4 +1,5 @@
 import type { Msg } from "./adapters/adapter.ts";
+import { parseCommand } from "./commands.ts";
 import type { State } from "./state.ts";
 
 export type Action =
@@ -9,7 +10,13 @@ export type Action =
   | { kind: "answer"; questionId: string; text: string }
   | { kind: "instruction"; text: string }
   | { kind: "status" }
-  | { kind: "back" };
+  | { kind: "back" }
+  | { kind: "extend"; minutes: number }
+  | { kind: "extend"; at: string }
+  | { kind: "snooze"; minutes: number }
+  | { kind: "snooze"; at: string }
+  | { kind: "unsnooze" }
+  | { kind: "more"; id: string };
 
 // Claude Code request IDs: five letters a-z without "l".
 const VERDICT = /^(y|yes|n|no)(?:\s+([a-km-z]{5}))?$/i;
@@ -74,12 +81,6 @@ export function parseTargeted(text: string, s: State): Action | null {
   const id = m?.[1]?.toLowerCase();
   if (!m || !s.questions.some((q) => q.id === id)) return null;
   return { kind: "answer", questionId: id!, text: m[2]!.trim() };
-}
-
-/** Exact `status` or `back`, nothing else. */
-export function parseCommand(text: string): Action | null {
-  const word = text.toLowerCase();
-  return word === "status" || word === "back" ? { kind: word } : null;
 }
 
 /** Plain text answers the newest open question. */
