@@ -13,8 +13,9 @@ export function slackAdapter(
   cfg: { botToken: string; appToken: string; me: string },
   net: Net,
   openSocket: (url: string) => WebSocketLike,
-): Adapter & { start(): Promise<void>; stop(): void } {
+): Adapter & { start(): Promise<void>; stop(): void; pairDms(since: string): Promise<Msg[]> } {
   let buffer: Msg[] = [];
+  let pairing: Msg[] = [];
   let fatal: Error | null = null;
   let channel: string | null = null;
 
@@ -31,8 +32,11 @@ export function slackAdapter(
   function onEvent(payload: Json): void {
     const e = (payload.event ?? {}) as Json;
     if (e.type !== "message" || e.channel_type !== "im" || e.subtype || e.bot_id) return;
-    if (e.user !== cfg.me || typeof e.text !== "string" || typeof e.ts !== "string") return; // sender gate
-    buffer.push({ id: e.ts, from: e.user, text: e.text, at: new Date(Number(e.ts) * 1000).toISOString() });
+    if (typeof e.user !== "string" || typeof e.text !== "string" || typeof e.ts !== "string") return;
+    const m: Msg = { id: e.ts, from: e.user, text: e.text, at: new Date(Number(e.ts) * 1000).toISOString() };
+    if (e.user === cfg.me) buffer.push(m); // sender gate
+    // Pairing can't know the sender yet: it sees only bare 6-digit codes, never other text. Capped.
+    else if (/^\s*\d{6}\s*$/.test(e.text)) pairing = [...pairing.slice(-19), m];
   }
 
   const socket = socketClient({
@@ -60,5 +64,7 @@ export function slackAdapter(
       return out;
     },
     me: async () => cfg.me,
+    /** Code-shaped DMs from anyone since `since`, for pairing only. */
+    pairDms: async (since) => pairing.filter((m) => m.at > since),
   };
 }

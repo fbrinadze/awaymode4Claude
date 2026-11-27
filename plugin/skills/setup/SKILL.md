@@ -16,6 +16,16 @@ Walk the user through connecting this Claude Code session to Teams, using the Aw
   Then stop.
 - If `setup` says the Tenant ID, Bot app ID and Bot secret aren't set: those come from `setup/create-app.ps1` (Windows) or `setup/create-app.sh`, run by the user or their IT admin. Point them to the README's setup section, then stop.
 
+## Slack
+
+If the user uses Slack (the two Slack tokens are configured, so the `setup` tool's description mentions Slack and a 6-digit code), follow this instead of the Teams steps:
+
+1. Call `setup` with `step: "start"`. Tell the user to DM the Away Mode bot in Slack with the 6-digit code it returns (valid 10 minutes). The code is meant to be sent to the bot, not pasted here.
+2. When they say they've sent it, call `setup` with `step: "finish"`. If it didn't see the code, ask them to resend it exactly; if it expired, start again.
+3. On "Paired", the bot also DMs them "Paired". Tell them they're ready. Slack setup is not live-tested yet, so relay any error plainly.
+
+Never ask the user to paste a Slack token into the chat; tokens go in via `claude plugin configure away-mode`.
+
 ## Steps
 
 0. If the user says they already signed in (for example in a session that has since closed), call `setup` with `step: "finish"` first. Away Mode keeps the pending code for about 15 minutes. If `finish` says sign-in expired, continue with step 1.
