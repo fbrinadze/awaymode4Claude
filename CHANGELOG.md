@@ -2,7 +2,17 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.1.0] - unreleased
+## [0.2.1] - 2026-11-26
+
+### Fixed
+- The plugin manifest version now matches the release, so `claude plugin update` picks up new releases (0.1.0 and 0.2.0 both shipped as 0.1.0) (PR #9).
+
+## [0.2.0] - 2026-11-26
+
+### Added
+- Slack over Socket Mode, with code pairing and setup docs. Not live-tested yet (PR #7, #8).
+
+## [0.1.0] - 2026-11-26
 
 ### Added
 - Teams relay: questions, permission prompts, finished-task notes and errors go to a Teams chat, and replies come back into the session (PR #1, #2).
