@@ -277,7 +277,8 @@ Each phase ends with a check that must pass before the next starts.
 - [x] `away`, `back` skills (brought forward: plain "going away" didn't turn away mode on in the live check)
 - [x] `status` skill and `status` tool
 - [x] `hook.ts`: question redirect, finished summary, API-error alert (queued in `state.json`, sent by the server), auto-back
-- [x] End-of-day policy, `never_relay`, sensitive-request guard (both directions)
+- [x] End-of-day policy, `never_relay`, sensitive-request guard (both directions, plus redaction of key-shaped text in everything sent)
+- [x] Away mode belongs to the session that turned it on (a `PostToolUse` hook on `set_away` records it); other Claude Code sessions on the machine aren't affected
 
 **Check:** all four triggers fire only while away (unit tests per event, away and not away); hooks add under 50 ms when off (measured 38 ms total, 22 ms over Bun's own startup). Still to confirm live: a Teams reply must not end away mode. The hook ignores prompts that arrive as `<channel …>` events, but the docs don't say whether channel events trigger `UserPromptSubmit`.
 
