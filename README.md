@@ -183,6 +183,10 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 - [ ] Several sessions away at once, routed by project
 - [ ] Listing in Anthropic's plugin directory
 
+## Status
+
+Pre-release (v0.1.0, unreleased). See [CHANGELOG.md](CHANGELOG.md).
+
 ## Contributing
 
 Issues and PRs are welcome. This project stays small on purpose. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first:
