@@ -2,6 +2,30 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.1.0] - 2026-11-27
+
+### Added
+- **Several projects away at once, from one Teams chat.** Each message names its project. `yes <id>` and `#qN` go to the project that asked; `@project …` targets one project; plain text goes to the only away project, or the only open question, otherwise Away Mode asks which project (PRs #16, #17).
+- **New Teams commands:** `extend 1h`, `until 6pm`, `snooze 30m`, `snooze until 3pm`, `unsnooze`, `more <id>`. Each can start with `@project`.
+- **`more <id>`:** a command too long to show in one message can be read in parts and then approved from Teams. Until you've read it all, approval stays blocked.
+- **A recap in Teams** whenever away mode ends (time up, `back`, typing at the terminal, `set_away off`, or a handover), listing what finished, what was cancelled and what's unanswered. Snoozed "Done" and "Update" notes are kept for it.
+- **`/away-mode:doctor`**, which checks Bun, settings, sign-in, Teams pairing and state, and says what to fix.
+- **Settings:** `sessions` (`several`, or `one` to hand over from the previous project) and `reply_routing` (quote a bot message to reply to its project; off by default). The installer takes `-Sessions` and `-ReplyRouting`.
+- Directory-listing metadata, a privacy policy, and a plugin README and LICENSE (PR #15).
+
+### Changed
+- The installer links Bun into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is always on PATH, so the plugin runs plain `bun` and the `bun_path` setting is gone.
+- `state.json` is now version 2 (one entry per project). It's migrated on first start, keeping your pairing; pending questions and approvals from before the upgrade are dropped.
+- A session started in your home folder is shown as `home` in Teams.
+
+### Security
+From the follow-up security audit (run-2):
+- Teams replies, answers and approvals reach only the session they were meant for (each session runs its own server; only one polls Teams, and only the owning server delivers).
+- An approval is delivered only by the server that raised the request.
+- Nothing carries over between away periods, and session ownership is cleared when away ends.
+- `state.json` has a single writer at a time (a lock file); the hook keeps owner-only (0600) permissions; the file's contents are validated when read.
+- An edited old "yes" can't approve a newer request (the send time, not the edit time, is compared).
+
 ## [1.0.1] - 2026-11-27
 
 ### Security
