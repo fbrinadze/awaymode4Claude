@@ -174,6 +174,21 @@ test("ask and notify record that Claude sent an update; acks don't", async () =>
   expect(load(dir).lastSentAt).toBe(0);
 });
 
+test("a new away period starts without the last one's open questions", async () => {
+  await tool("set_away", { on: true });
+  await tool("ask", { question: "Include archived?" });
+  await tool("set_away", { on: false });
+  await tool("set_away", { on: true });
+  expect(load(dir).questions).toEqual([]);
+});
+
+test("extending away mode keeps open questions", async () => {
+  await tool("set_away", { on: true });
+  await tool("ask", { question: "Include archived?" });
+  await tool("set_away", { on: true, minutes: 30 });
+  expect(load(dir).questions).toHaveLength(1);
+});
+
 test("set_away records when away mode started", async () => {
   await tool("set_away", { on: true });
   expect(load(dir).awayStartedAt).toBe(T);

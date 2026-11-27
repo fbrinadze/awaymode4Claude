@@ -110,7 +110,11 @@ export function makeTools(c: Ctx): Tool[] {
       }
       c.update((s) => {
         // Replies typed before going away aren't for us; extending keeps the cursor.
-        if (!isAway(s, now)) s.cursor = new Date(now).toISOString();
+        // A new away period: replies typed before it aren't for us, and last time's open questions are stale.
+        if (!isAway(s, now)) {
+          s.cursor = new Date(now).toISOString();
+          s.questions = [];
+        }
         s.awayUntil = until;
         s.awayStartedAt = now; // the Stop hook lets this turn end without a "finished" note
       });

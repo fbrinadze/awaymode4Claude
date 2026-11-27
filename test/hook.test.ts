@@ -62,6 +62,26 @@ test("a Teams message arriving as a channel event does not end away mode", () =>
   expect(decide({ hook_event_name: "UserPromptSubmit", prompt }, away(), now)).toEqual({});
 });
 
+test("the session that turned away mode on is recorded as its owner", () => {
+  const r = decide(
+    { hook_event_name: "PostToolUse", session_id: "A", tool_name: "mcp__plugin_away-mode_away__set_away", tool_input: { on: true } },
+    away(),
+    now,
+  );
+  expect(r).toEqual({ patch: { awaySession: "A" } });
+});
+
+test("other sessions are left alone while one is away", () => {
+  const owned = { ...away(), awaySession: "A", lastStopAt: now - 300_000 };
+  expect(decide({ ...ask, session_id: "B" }, owned, now)).toEqual({});
+  expect(decide({ ...stop(), session_id: "B" }, owned, now)).toEqual({});
+  expect(decide({ hook_event_name: "UserPromptSubmit", session_id: "B", prompt: "hi" }, owned, now)).toEqual({});
+  expect(decide({ hook_event_name: "StopFailure", session_id: "B", error: "rate_limit" }, owned, now)).toEqual({});
+  // The owner still gets the behaviour.
+  expect(decide({ ...ask, session_id: "A" }, owned, now).stdout).toContain("deny");
+  expect(decide({ hook_event_name: "UserPromptSubmit", session_id: "A", prompt: "hi" }, owned, now).patch).toEqual({ awayUntil: 0 });
+});
+
 test("the hook script adds little to Bun's own startup when away mode is off", async () => {
   const dir = mkdtempSync(join(tmpdir(), "away-hook-"));
   writeFileSync(join(dir, "state.json"), JSON.stringify({ awayUntil: 0 }));

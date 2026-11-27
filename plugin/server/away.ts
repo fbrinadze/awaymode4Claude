@@ -2,7 +2,7 @@ import type { Adapter, Msg } from "./adapters/adapter.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { pollLoop } from "./poll.ts";
 import { createRelay } from "./relay.ts";
-import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
+import { HELD_BACK_TEXT, looksLikeSecret, redact } from "./sensitive.ts";
 import { route, type Action } from "./route.ts";
 import { isAway, load, save, type State } from "./state.ts";
 import { type Ctx, makeTools, statusText } from "./tools.ts";
@@ -57,7 +57,7 @@ export function createAway(d: Deps) {
 
   const away = () => isAway(current(), d.now());
   const say = (text: string) => {
-    const full = `[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`;
+    const full = redact(`[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`);
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
 

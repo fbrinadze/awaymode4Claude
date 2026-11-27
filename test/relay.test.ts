@@ -97,6 +97,36 @@ test("a secret-looking reply is never passed to Claude", async () => {
   expect(h.fake.sent.at(-1)).toContain("wasn't passed on");
 });
 
+test("a token in a permission prompt is redacted before it reaches Teams", async () => {
+  const h = harness();
+  await h.tool("set_away", { on: true });
+  await h.permission('curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl" https://api.example.com');
+  expect(h.fake.sent.at(-1)).not.toContain("eyJ");
+  expect(h.fake.sent.at(-1)).toContain("[redacted]");
+});
+
+test("if Teams is down, queued alerts stay queued", async () => {
+  const h = harness();
+  await h.tool("set_away", { on: true });
+  const outbox = [{ type: "error", text: "Claude stopped: rate_limit" }, { type: "error", text: "Claude stopped: server_error" }];
+  save(h.dir, { ...load(h.dir), outbox });
+  h.fake.failSends = true;
+  await expect(h.away.pollOnce()).rejects.toThrow("Teams unreachable");
+  expect(load(h.dir).outbox).toEqual(outbox);
+});
+
+test("if Teams is down, Claude still hears about every timed-out question", async () => {
+  const h = harness();
+  await h.tool("set_away", { on: true });
+  await h.tool("ask", { question: "First?" });
+  await h.tool("ask", { question: "Second?" });
+  h.clock.t = T + 61 * 60_000;
+  h.fake.failSends = true;
+  await expect(h.away.pollOnce()).rejects.toThrow("Teams unreachable");
+  const timeouts = h.notes("notifications/claude/channel").filter((e) => (e.meta as Json).kind === "timeout");
+  expect(timeouts.map((e) => (e.meta as Json).question_id)).toEqual(["q1", "q2"]);
+});
+
 test("a late answer to a timed-out question becomes an instruction", async () => {
   const h = harness();
   await h.tool("set_away", { on: true });

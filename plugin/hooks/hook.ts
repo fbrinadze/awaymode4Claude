@@ -1,4 +1,4 @@
-// Away Mode hooks: PreToolUse (AskUserQuestion), Stop, StopFailure, UserPromptSubmit.
+// Away Mode hooks: PostToolUse (set_away), PreToolUse (AskUserQuestion), Stop, StopFailure, UserPromptSubmit.
 // No project imports: this runs on every hook event and must start fast. When away mode is
 // off it exits without even reading stdin.
 import { renameSync } from "node:fs";
@@ -22,6 +22,13 @@ const isAway = (s: Obj | null, now: number): s is Obj => !!s && num(s.awayUntil)
 /** What to print and how to change state.json for one hook event. Pure, for tests. */
 export function decide(input: Obj, state: Obj | null, now: number): Decision {
   if (!isAway(state, now)) return {};
+  if (input.hook_event_name === "PostToolUse") {
+    // set_away just turned away mode on: this session owns it.
+    const on = (input.tool_input as Obj | undefined)?.on === true;
+    return on && typeof input.session_id === "string" ? { patch: { awaySession: input.session_id } } : {};
+  }
+  // Away state is shared by every session on the machine; act only for the one that's away.
+  if (typeof state.awaySession === "string" && input.session_id !== state.awaySession) return {};
   switch (input.hook_event_name) {
     case "PreToolUse":
       if (input.tool_name !== "AskUserQuestion") return {};

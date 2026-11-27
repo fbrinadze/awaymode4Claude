@@ -1,6 +1,12 @@
 {
   "description": "Away Mode: while away, send questions to Teams, make sure finished work is reported, alert on API errors, and end away mode when you type at the terminal.",
   "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*__set_away",
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "AskUserQuestion",

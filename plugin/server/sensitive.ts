@@ -7,13 +7,21 @@ export const SENSITIVE_TEXT =
 export const HELD_BACK_TEXT =
   "That looked like a password or key, so it wasn't passed on to Claude. Enter it in Claude Code instead, and consider rotating it.";
 
-const REQUEST = /\b(send|give|enter|paste|share|provide|type|tell me|what'?s|what is)\b/i;
-const SECRET_NOUN =
-  /\b(password|passcode|passphrase|pin|api key|access key|token|secret|private key|connection string|one[- ]time code|otp|mfa code|2fa code|verification code|card number|credit card|cvv)\b/i;
+const NOUN =
+  "(?:password|passcode|passphrase|pin|api key|access key|token|secret|private key|connection string|one[- ]time code|otp|mfa code|2fa code|verification code|card number|credit card|cvv)";
+// The noun must be the thing asked for: not part of "secret-scanning", "token format", "PIN field"...
+const NOT_A_MODIFIER = "(?![-\\w])(?!\\s+(?:format|storage|limit|field|config|name|length|policy|rotation|expiry|type|reset|scanning)\\b)";
+/** "send me your API key", "enter the MFA code", "paste the connection string" */
+const HAND_OVER = new RegExp(
+  `\\b(?:send|give|paste|share|provide|enter|type in|tell me)\\s+(?:me\\s+|us\\s+)?(?:your|the|a|an|my)?\\s*(?:\\w+\\s+)?${NOUN}${NOT_A_MODIFIER}`,
+  "i",
+);
+/** "What's the database password?" — the noun ends the question. */
+const WHAT_IS = new RegExp(`\\bwhat(?:'?s| is)\\s+(?:your|the|my)\\s+(?:\\w+\\s+)?${NOUN}\\s*\\??\\s*$`, "i");
 
-/** Asks the user for a credential: request wording together with a secret noun. When unsure, block. */
+/** Asks the user to hand over a credential, not merely mentions one. */
 export function asksForSecret(text: string): boolean {
-  return REQUEST.test(text) && SECRET_NOUN.test(text);
+  return HAND_OVER.test(text) || WHAT_IS.test(text);
 }
 
 const KNOWN = [
@@ -32,4 +40,10 @@ const randomLooking = (word: string): boolean =>
 /** A reply that looks like a credential. Never passed to Claude. */
 export function looksLikeSecret(text: string): boolean {
   return KNOWN.some((r) => r.test(text)) || text.split(/\s+/).some(randomLooking);
+}
+
+/** Outgoing text with key- and token-shaped parts replaced, so a command or note can't carry one to Teams. */
+export function redact(text: string): string {
+  const known = KNOWN.reduce((t, r) => t.replace(new RegExp(r.source, "g"), "[redacted]"), text);
+  return known.replace(/[\w+/=-]{32,}/g, (w) => (randomLooking(w) ? "[redacted]" : w));
 }

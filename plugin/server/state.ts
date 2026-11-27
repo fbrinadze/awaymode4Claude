@@ -32,6 +32,8 @@ export interface State {
   lastStopAt: number;
   /** Epoch ms away mode was last turned on. */
   awayStartedAt: number;
+  /** Claude Code session that turned away mode on (set by the hook); other sessions are left alone. */
+  awaySession?: string;
   /** Messages queued by hooks (which can't send) for the server to deliver on its next poll. */
   outbox: { type: string; text: string }[];
 }

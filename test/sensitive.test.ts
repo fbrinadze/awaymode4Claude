@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { asksForSecret, looksLikeSecret, SENSITIVE_TEXT } from "../plugin/server/sensitive.ts";
+import { asksForSecret, looksLikeSecret, redact, SENSITIVE_TEXT } from "../plugin/server/sensitive.ts";
 
 test("asksForSecret catches requests for credentials", () => {
   for (const q of [
@@ -19,6 +19,12 @@ test("asksForSecret ignores ordinary questions, even about tokens", () => {
     "Include archived orders?",
     "Which token format do you prefer, JWT or opaque?",
     "Should the password reset page show a captcha?",
+    "What type of token storage do you prefer: cookies or localStorage?",
+    "What is the max token limit for the summarizer?",
+    "Should I share the secret-scanning config with the CI job?",
+    "Which type should the PIN field be, string or number?",
+    "What is the name of the env var for the API key?",
+    "Please share the token format you want.",
   ]) {
     expect(asksForSecret(q)).toBe(false);
   }
@@ -49,6 +55,15 @@ test("looksLikeSecret leaves ordinary replies alone", () => {
   ]) {
     expect(looksLikeSecret(s)).toBe(false);
   }
+});
+
+test("redact hides keys and tokens in outgoing text, leaving the rest", () => {
+  const out = redact('curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.c2lnbmF0dXJl" https://api.example.com');
+  expect(out).not.toContain("eyJ");
+  expect(out).toContain("[redacted]");
+  expect(out).toContain("https://api.example.com");
+  expect(redact(`export OPENAI_API_KEY=sk-${"a1B2".repeat(6)}`)).toBe("export OPENAI_API_KEY=[redacted]");
+  expect(redact("Bash: npm run migrate")).toBe("Bash: npm run migrate");
 });
 
 test("the sensitive notice sends people back to the terminal", () => {
