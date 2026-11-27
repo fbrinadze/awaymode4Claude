@@ -10,6 +10,8 @@ import { type Store, withStore } from "./store.ts";
 export interface PollerDeps {
   dir: string;
   key: string;
+  /** This server's instance token: the lease and delivery belong to it, not to the project. */
+  instance: string;
   now(): number;
   adapter: Adapter;
   deliverLocal(r: Routed): Promise<void>;
@@ -30,12 +32,16 @@ function live(s: Store, d: PollerDeps, now: number): Store {
   return { ...s, projects };
 }
 
-/** The cursor to poll from if this project is away and holds the lease, else null. */
+/** The cursor to poll from if this instance owns an away project and holds the lease, else null. */
 function claim(d: PollerDeps): string | null {
   const t = d.now();
   return withStore(d.dir, t, (s) => {
-    if (!((s.projects[d.key]?.awayUntil ?? 0) > t)) return releaseLease(s, d.key), null;
-    return takeLease(s, d.key, t) ? s.cursor : null;
+    const p = s.projects[d.key];
+    if (!p || !(p.awayUntil > t) || p.ownerInstance !== d.instance) return releaseLease(s, d.instance), null;
+    // A lease whose holder no longer owns any away project (ownership moved) is dead: don't wait it out.
+    const h = s.lease?.owner;
+    if (h && !Object.values(s.projects).some((q) => q.awayUntil > t && q.ownerInstance === h)) s.lease = null;
+    return takeLease(s, d.instance, t) ? s.cursor : null;
   });
 }
 
@@ -49,14 +55,20 @@ export function drainInbox(dir: string, key: string, now: number): Action[] {
   });
 }
 
-/** Cursor moves with the dispatch, in one write: a message is acted on at most once. */
-function routeOne(d: PollerDeps, m: Msg): Routed {
+/**
+ * Cursor moves with the dispatch, in one write: a message is acted on at most once, and a
+ * message at or before the cursor is skipped. Returns null for those; `local` is true when
+ * this instance owns a target (or none is named) and delivers it itself. Others get an inbox item.
+ */
+function routeOne(d: PollerDeps, m: Msg): { r: Routed; local: boolean } | null {
   const t = d.now();
   return withStore(d.dir, t, (s) => {
+    if (m.at <= s.cursor) return null;
     s.cursor = m.at;
     const r = dispatch(m, live(s, d, t), t, d.replyRouting ?? false);
-    for (const k of r.targets) if (k !== d.key) s.projects[k]?.inbox.push({ action: r.action, at: m.at });
-    return r;
+    const mine = (k: string) => k === d.key && s.projects[k]?.ownerInstance === d.instance;
+    for (const k of r.targets) if (!mine(k)) s.projects[k]?.inbox.push({ action: r.action, at: m.at });
+    return { r, local: !r.targets.length || r.targets.some(mine) };
   });
 }
 
@@ -77,9 +89,9 @@ export async function pollCycle(d: PollerDeps): Promise<number> {
   if (cursor === null) return 0;
   const msgs = await d.adapter.poll(cursor);
   for (const m of msgs) {
-    const r = routeOne(d, m);
+    const o = routeOne(d, m);
     // No target (drop, prompt): the holder answers, since nobody else will.
-    if (!r.targets.length || r.targets.includes(d.key)) await d.deliverLocal(r);
+    if (o?.local) await d.deliverLocal(o.r);
   }
   return msgs.length;
 }

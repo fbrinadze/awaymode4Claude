@@ -121,7 +121,36 @@ test("the inbox drains on its own 5 s timer while the Graph poll is backed off",
   expect(i1.channel()).toEqual(["now"]);
 });
 
-const expiredPermission = (h: ReturnType<typeof pair>, extra = {}) =>
+test("two servers in one project: only the owner polls Graph and delivers", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  const y = h.mk("Y");
+  await x.call("set_away", { on: true });
+  expect(h.owner()).toBe("X");
+  x.fake.reply("deploy it", h.clock.t);
+  y.fake.reply("deploy it", h.clock.t);
+  await y.away.pollOnce();
+  expect(y.channel()).toEqual([]);
+  expect(y.fake.inbox.length).toBe(1); // Y never polled Graph
+  await x.away.pollOnce();
+  expect(x.channel()).toEqual(["deploy it"]);
+  expect(y.channel()).toEqual([]);
+  expect(withStore(h.dir, h.clock.t, (s) => s.lease?.owner)).toBe("X");
+});
+
+test("the cursor never moves backwards", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  await x.call("set_away", { on: true });
+  const later = new Date(h.clock.t + 10_000).toISOString();
+  withStore(h.dir, h.clock.t, (s) => void (s.cursor = later));
+  x.fake.poll = async () => [{ id: "m1", from: "user-1", text: "old", at: new Date(h.clock.t + 5).toISOString() }];
+  await x.away.pollOnce();
+  expect(x.channel()).toEqual([]);
+  expect(withStore(h.dir, h.clock.t, (s) => s.cursor)).toBe(later);
+});
+
+const expiredPermission =(h: ReturnType<typeof pair>, extra = {}) =>
   withStore(h.dir, h.clock.t, (s) => void s.projects[KEY]!.permissions.push({ id: "abcde", tool: "Bash", at: h.clock.t, instance: "I1", needsMore: true, ...extra }));
 
 test("an id older than wait_minutes is not approved by yes <id>", async () => {
