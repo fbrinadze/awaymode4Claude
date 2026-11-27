@@ -16,19 +16,58 @@ export interface RelayDeps {
 // Claude Code request IDs: five letters a-z without "l".
 const REQUEST_ID = /^[a-km-z]{5}$/;
 const HEADERS: Record<string, string> = { error: "Error", finished: "Done", info: "Update" };
+// Sized so the whole prompt, reply line included, fits the 1200-character Teams message cap.
+const TOOL_MAX = 100;
+const DESC_MAX = 300;
+const PREVIEW_MAX = 600;
+
+const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+
+/**
+ * Canonical form of a command for never_relay matching, applied to both the request text and
+ * each pattern, so spacing, quoting and flag order can't sneak a protected command past it.
+ */
+export function normalise(text: string): string {
+  // Each run of flags becomes one sorted short-flag cluster, then its long flags:
+  // "-rf", "-fr", "-r -f" and "--no-preserve-root -rf" all start with "-fr".
+  const out: string[] = [];
+  let shorts = new Set<string>();
+  let longs: string[] = [];
+  const flush = () => {
+    if (shorts.size) out.push(`-${[...shorts].sort().join("")}`);
+    out.push(...longs.sort());
+    shorts = new Set();
+    longs = [];
+  };
+  for (const word of text.toLowerCase().replace(/["'`]/g, "").split(/\s+/).filter(Boolean)) {
+    if (/^-[a-z0-9]+$/.test(word)) for (const c of word.slice(1)) shorts.add(c);
+    else if (/^--[a-z0-9-]+$/.test(word)) longs.push(word);
+    else {
+      flush();
+      out.push(word);
+    }
+  }
+  flush();
+  return out.join(" ");
+}
 
 export function createRelay(r: RelayDeps) {
-  /** Relays a permission prompt to Teams, unless it matches never_relay. */
+  const terminalOnly = (tool: string, why: string) =>
+    r.say(`Terminal-only approval\n${tool} is waiting for approval at your terminal (it ${why}).`);
+
+  /** Relays a permission prompt to Teams, unless it matches never_relay or can't be shown whole. */
   async function onPermissionRequest(p: Json): Promise<void> {
     const id = String(p.request_id ?? "");
     if (!isAway(r.current(), r.now()) || !REQUEST_ID.test(id)) return;
-    const shown = `${p.description ?? ""}\n${p.input_preview ?? ""}`.toLowerCase();
-    if (r.neverRelay.some((pattern) => shown.includes(pattern))) {
-      await r.say(`Terminal-only approval\n${p.tool_name} is waiting for approval at your terminal (it matches never_relay).`);
-      return;
-    }
-    await r.say(`Permission needed\n${p.tool_name}: ${p.description}\n${p.input_preview}\nReply "yes ${id}" or "no ${id}".`);
-    r.update((s) => void s.permissions.push({ id, tool: String(p.tool_name), at: r.now() }));
+    const tool = clip(String(p.tool_name ?? ""), TOOL_MAX);
+    const preview = String(p.input_preview ?? "");
+    const shown = normalise(`${tool}\n${p.description ?? ""}\n${preview}`);
+    if (r.neverRelay.some((pattern) => shown.includes(normalise(pattern)))) return terminalOnly(tool, "matches never_relay");
+    // Never ask for approval of a command the user can't see in full.
+    if (preview.length > PREVIEW_MAX) return terminalOnly(tool, "is too long to show in Teams");
+    const description = clip(String(p.description ?? ""), DESC_MAX);
+    await r.say(`Permission needed\n${tool}: ${description}\n${preview}\nReply "yes ${id}" or "no ${id}".`);
+    r.update((s) => void s.permissions.push({ id, tool, at: r.now() }));
   }
 
   /** Sends what hooks queued (they can't reach Teams themselves). Taken in one update so nothing is sent twice; what couldn't be sent goes back. */

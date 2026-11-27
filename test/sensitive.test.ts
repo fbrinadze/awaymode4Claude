@@ -43,6 +43,13 @@ test("looksLikeSecret catches keys, tokens and private keys", () => {
   }
 });
 
+test("looksLikeSecret catches a key wrapped in quotes, punctuation or a label", () => {
+  const k = "Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4Z";
+  for (const s of [`token "${k}"`, `here: ${k}.`, `key:${k}`, `(${k})`, `'${k}',`, "Abc8Q~dEf6hIj9kLm2nOp5qRs8tUv1wXy4Z.x7"]) {
+    expect(looksLikeSecret(s)).toBe(true);
+  }
+});
+
 test("looksLikeSecret leaves ordinary replies alone", () => {
   for (const s of [
     "yes abcde",
@@ -52,6 +59,8 @@ test("looksLikeSecret leaves ordinary replies alone", () => {
     "Exclude archived orders and rerun the export please",
     "https://example.com/a/b/c/d/e",
     "use order 1234567890",
+    "C:/Users/fbrinadze/projects/awaymode/plugin/server",
+    "Please rename OrderExportService.ts to OrderExport.ts",
   ]) {
     expect(looksLikeSecret(s)).toBe(false);
   }

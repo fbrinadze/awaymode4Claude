@@ -3,7 +3,7 @@
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "mcp__.*__set_away",
+        "matcher": "mcp__plugin_away-mode_away__set_away",
         "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ],

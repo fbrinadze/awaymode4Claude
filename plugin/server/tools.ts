@@ -34,6 +34,14 @@ export function statusText(s: State, now: number): string {
 export function makeTools(c: Ctx): Tool[] {
   /** Claude reached the user this turn; the Stop hook checks this. Server acks don't call it. */
   const sent = () => c.update((s) => void (s.lastSentAt = c.deps.now()));
+  const NOT_SENT = "Not sent: secrets can't be shared over Teams. The user was told to come back to the terminal; park anything that needs it.";
+  /** If any model-written part asks for a secret, send the fixed notice instead of the message. */
+  const refuse = async (parts: string[]): Promise<boolean> => {
+    if (!parts.some(asksForSecret)) return false;
+    await c.say(SENSITIVE_TEXT);
+    sent();
+    return true;
+  };
 
   const ask: Tool = {
     name: "ask",
@@ -42,12 +50,8 @@ export function makeTools(c: Ctx): Tool[] {
     async run(a) {
       requireAway(c);
       const question = text(a.question, "question");
-      if (asksForSecret(question)) {
-        await c.say(SENSITIVE_TEXT);
-        sent();
-        return "Not sent: secrets can't be shared over Teams. The user was told to come back to the terminal; park anything that needs it.";
-      }
       const options = Array.isArray(a.options) ? a.options.map(String) : [];
+      if (await refuse([question, ...options])) return NOT_SENT;
       let id = "";
       c.update((s) => {
         id = `q${s.nextQ++}`;
@@ -76,8 +80,11 @@ export function makeTools(c: Ctx): Tool[] {
       requireAway(c);
       const type = String(a.type);
       if (type === "sensitive") await c.say(SENSITIVE_TEXT);
-      else if (Object.hasOwn(HEADERS, type)) await c.say(`${HEADERS[type]}\n${text(a.text, "text")}`);
-      else throw new Error("type must be finished, error, info or sensitive.");
+      else if (Object.hasOwn(HEADERS, type)) {
+        const body = text(a.text, "text");
+        if (await refuse([body])) return NOT_SENT;
+        await c.say(`${HEADERS[type]}\n${body}`);
+      } else throw new Error("type must be finished, error, info or sensitive.");
       sent();
       return "Sent.";
     },
