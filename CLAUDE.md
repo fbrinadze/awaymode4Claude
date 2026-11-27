@@ -25,13 +25,13 @@ bun run validate                 # claude plugin validate --strict on marketplac
 ## Layout: two manifests, one install boundary
 
 - Repo root is the **`awaymode` marketplace** (`.claude-plugin/marketplace.json`). `plugin/` is the **`away-mode` plugin**, which is the only folder copied to users' machines. Tests, docs, CI and admin scripts (`setup/`) must stay **outside `plugin/`**.
-- `plugin/.claude-plugin/plugin.json` declares the stdio MCP server (`bun ${CLAUDE_PLUGIN_ROOT}/server/index.ts`), the channel, and `userConfig`. User settings reach the server only as `AWAY_*` env vars (`AWAY_TENANT_ID`, `AWAY_BOT_ID`, `AWAY_BOT_SECRET`, `AWAY_HOURS`, `AWAY_WAIT_MINUTES`, `AWAY_END_OF_DAY_ACTION`, `AWAY_NEVER_RELAY`, `AWAY_SLACK_BOT_TOKEN`, `AWAY_SLACK_APP_TOKEN`). If you add a setting, add it in both places.
+- `plugin/.claude-plugin/plugin.json` declares the stdio MCP server (`bun ${CLAUDE_PLUGIN_ROOT}/server/index.ts`), the channel, and `userConfig`. User settings reach the server only as `AWAY_*` env vars (`AWAY_TENANT_ID`, `AWAY_BOT_ID`, `AWAY_BOT_SECRET`, `AWAY_HOURS`, `AWAY_WAIT_MINUTES`, `AWAY_END_OF_DAY_ACTION`, `AWAY_NEVER_RELAY`). If you add a setting, add it in both places.
 - Plugin/marketplace names must not start with `claude-` (reserved).
 
 ## Architecture (planned, see `docs/PLAN.md` "Architecture" and "Repository layout")
 
 - **Channel server** (`plugin/server/`): a hand-rolled stdio JSON-RPC MCP server (`mcp.ts`, **not** the MCP SDK) that declares `claude/channel` and `claude/channel/permission`, exposes `ask` and `notify` tools, relays permission prompts, and routes replies.
-- **Adapters** (`server/adapters/`): an interface with `send()`, `poll()` and `me()`. Teams = Bot Connector REST to send (bot client-credentials token) plus Microsoft Graph delegated `Chat.Read` polling of the bot chat. Slack later must be **one new adapter file**. If it needs changes elsewhere, the interface is wrong.
+- **Adapters** (`server/adapters/`): an interface with `send()`, `poll()` and `me()`. Teams = Bot Connector REST to send (bot client-credentials token) plus Microsoft Graph delegated `Chat.Read` polling of the bot chat. Another platform must be **one new adapter file**. If it needs changes elsewhere, the interface is wrong.
 - **No inbound network listener, ever.** Replies arrive by polling, and only while away mode is on (backoff from 5 s to 60 s). No card buttons, because they'd need a bot web endpoint.
 - **Hooks** (`plugin/hooks/hook.ts`): `PreToolUse` (redirect `AskUserQuestion` to `ask` while away), `Stop` (make sure a finished note goes out), `StopFailure` (error alert), `UserPromptSubmit` (terminal input ends away mode). Hooks **import nothing** and must exit in under 50 ms when away mode is off.
 - **State**: `${CLAUDE_PLUGIN_DATA}/state.json`, shared by the server and the hooks.
