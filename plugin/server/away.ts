@@ -1,12 +1,12 @@
 import type { Adapter } from "./adapters/adapter.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
-import { pollLoop } from "./poll.ts";
-import { drainInbox, pollCycle } from "./poller.ts";
+import { MIN_DELAY, pollLoop } from "./poll.ts";
+import { adopt, claimOwner, drainOwned, makeAct } from "./deliver.ts";
+import { pollCycle } from "./poller.ts";
 import { createRelay } from "./relay.ts";
-import { HELD_BACK_TEXT, looksLikeSecret, redact } from "./sensitive.ts";
-import type { Action } from "./route.ts";
+import { redact } from "./sensitive.ts";
 import { isAway, load, save, type State } from "./state.ts";
-import { type Ctx, makeTools, statusText } from "./tools.ts";
+import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
   adapter: Adapter;
@@ -22,6 +22,8 @@ export interface Deps {
   neverRelay?: string[];
   /** With no reply after waitMinutes: park the task, or continue safely. */
   endOfDay?: "park" | "safest";
+  /** This server's instance token (tests inject one). */
+  instance?: string;
   now(): number;
   sleep(ms: number): Promise<void>;
   write(line: string): void;
@@ -41,6 +43,7 @@ const INSTRUCTIONS = [
 export function createAway(d: Deps) {
   let polling = false;
   const key = d.key ?? "default";
+  const instance = d.instance ?? crypto.randomUUID();
 
   // ponytail: pending permissions expire after wait_minutes because Claude Code never says
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
@@ -71,37 +74,27 @@ export function createAway(d: Deps) {
     void pollLoop({ fetch: pollOnce, away, sleep: d.sleep }).finally(() => {
       polling = false;
     });
+    // The inbox has its own short timer: the Graph poll's backoff must not delay a second project's replies.
+    void (async () => {
+      while (away()) {
+        await drainMine().catch((e) => console.error(`away-mode: inbox failed: ${(e as Error).message}`));
+        await d.sleep(MIN_DELAY);
+      }
+    })();
   }
 
   /** Timeouts first (so a late answer can't hit a closed question), then queued alerts, then actions other servers queued for us, then the (leased) poll. */
+  /** Owner only. Away is re-checked before each item, so nothing is acted on after `back`. */
+  async function drainMine(): Promise<void> {
+    adopt(d.dir, key, instance, d.now());
+    for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
+  }
+
   async function pollOnce(): Promise<number> {
     await relay.sweepTimeouts();
     await relay.drainOutbox();
-    for (const a of drainInbox(d.dir, key, d.now())) await act(a);
+    await drainMine();
     return pollCycle({ dir: d.dir, key, now: d.now, adapter: d.adapter, deliverLocal: (r) => act(r.action) });
-  }
-
-  async function act(a: Action): Promise<void> {
-    if ((a.kind === "answer" || a.kind === "instruction") && looksLikeSecret(a.text)) return say(HELD_BACK_TEXT);
-    switch (a.kind) {
-      case "drop": return;
-      case "confirm": case "prompt": return say(a.text);
-      case "verdict":
-        update((s) => void (s.permissions = s.permissions.filter((p) => p.id !== a.id)));
-        server.notify("notifications/claude/channel/permission", { request_id: a.id, behavior: a.behavior });
-        return say(a.behavior === "allow" ? "Approved." : "Denied.");
-      case "answer":
-        return answer(a.questionId, a.text);
-      case "instruction":
-        channel(a.text, { kind: "instruction" });
-        return say("Got it, passing that to Claude.");
-      case "status": return say(statusText(current(), d.now()));
-      case "extend": case "snooze": case "unsnooze": case "more": return say("Coming soon."); // delivery lands in a later task
-      case "back":
-        update((s) => void (s.awayUntil = 0));
-        channel("The user ended away mode from Teams.", { kind: "back" });
-        return say("Away mode off. Welcome back.");
-    }
   }
 
   async function answer(id: string, text: string): Promise<void> {
@@ -122,13 +115,18 @@ export function createAway(d: Deps) {
     if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p);
   }
 
+  const act = makeAct({
+    dir: d.dir, key, instance, now: d.now, current, update, say, channel, answer,
+    notify: (m, p) => server.notify(m, p),
+  });
+
   const relay = createRelay({
-    current, update, say, channel, now: d.now, waitMinutes: d.waitMinutes,
+    instance, current, update, say, channel, now: d.now, waitMinutes: d.waitMinutes,
     neverRelay: (d.neverRelay ?? []).map((p) => p.toLowerCase()),
     endOfDay: d.endOfDay ?? "park",
   });
 
-  const ctx = { deps: d, current, update, say, startPolling };
+  const ctx = { deps: d, current, update, say, startPolling, claimOwner: () => claimOwner(d.dir, key, instance, d.now()) };
   const server = createServer(
     { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: [...makeTools(ctx), ...(d.extraTools?.(ctx) ?? [])], onNotification },
     d.write,

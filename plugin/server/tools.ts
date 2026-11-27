@@ -9,6 +9,8 @@ export interface Ctx {
   update(fn: (s: State) => void): State;
   say(text: string): Promise<void>;
   startPolling(): void;
+  /** Record this server as the project's delivery owner. */
+  claimOwner(): void;
 }
 
 const HEADERS: Record<string, string> = { finished: "Done", error: "Error", info: "Update" };
@@ -125,6 +127,7 @@ export function makeTools(c: Ctx): Tool[] {
         s.awayUntil = until;
         s.awayStartedAt = now; // the Stop hook lets this turn end without a "finished" note
       });
+      c.claimOwner();
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },

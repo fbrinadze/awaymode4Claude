@@ -2,6 +2,8 @@ import type { Json } from "./mcp.ts";
 import { isAway, type State } from "./state.ts";
 
 export interface RelayDeps {
+  /** Tags each new permission, so only this server delivers its verdict. */
+  instance: string;
   current(): State;
   update(fn: (s: State) => void): State;
   say(text: string): Promise<void>;
@@ -67,7 +69,7 @@ export function createRelay(r: RelayDeps) {
     if (preview.length > PREVIEW_MAX) return terminalOnly(tool, "is too long to show in Teams");
     const description = clip(String(p.description ?? ""), DESC_MAX);
     await r.say(`Permission needed\n${tool}: ${description}\n${preview}\nReply "yes ${id}" or "no ${id}".`);
-    r.update((s) => void s.permissions.push({ id, tool, at: r.now() }));
+    r.update((s) => void s.permissions.push({ id, tool, at: r.now(), instance: r.instance }));
   }
 
   /** Sends what hooks queued (they can't reach Teams themselves). Taken in one update so nothing is sent twice; what couldn't be sent goes back. */
