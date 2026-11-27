@@ -1,7 +1,8 @@
 // Away Mode hooks: PostToolUse (set_away), PreToolUse (AskUserQuestion), Stop, StopFailure, UserPromptSubmit.
-// No project imports: this runs on every hook event and must start fast. When away mode is
-// off it exits without even reading stdin.
-import { renameSync } from "node:fs";
+// No project imports: this runs on every hook event and must start fast. When no project is
+// away it exits without even reading stdin.
+import { closeSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 type Obj = Record<string, unknown>;
 export interface Decision {
@@ -20,33 +21,39 @@ const WELCOME_BACK =
 const SET_AWAY = "mcp__plugin_away-mode_away__set_away";
 
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);
-const isAway = (s: Obj | null, now: number): s is Obj => !!s && num(s.awayUntil) > now;
+const isAway = (s: Obj | null | undefined, now: number): s is Obj => !!s && num(s.awayUntil) > now;
 
-/** What to print and how to change state.json for one hook event. Pure, for tests. */
-export function decide(input: Obj, state: Obj | null, now: number): Decision {
-  if (!isAway(state, now)) return {};
+/** Same normalisation as the server's projectKey: absolute path, lower-cased on Windows. */
+export function projectKeyOf(input: Obj): string {
+  const dir = resolve(process.env.CLAUDE_PROJECT_DIR || String(input.cwd ?? "."));
+  return process.platform === "win32" ? dir.toLowerCase() : dir;
+}
+
+/** What to print and how to change one project's entry in state.json. Pure, for tests. */
+export function decide(input: Obj, project: Obj | null, now: number): Decision {
+  if (!isAway(project, now)) return {};
   if (input.hook_event_name === "PostToolUse") {
     // Our set_away just turned away mode on: this session owns it.
     const on = (input.tool_input as Obj | undefined)?.on === true;
     const failed = (input.tool_response as Obj | undefined)?.isError === true;
     const ours = input.tool_name === SET_AWAY && !failed;
-    return ours && on && typeof input.session_id === "string" ? { patch: { awaySession: input.session_id } } : {};
+    return ours && on && typeof input.session_id === "string" ? { patch: { sessionId: input.session_id } } : {};
   }
-  // Away state is shared by every session on the machine; act only for the one that's away.
-  if (typeof state.awaySession === "string" && input.session_id !== state.awaySession) return {};
+  // Several sessions can share a project; act only for the one that's away.
+  if (typeof project.sessionId === "string" && input.session_id !== project.sessionId) return {};
   switch (input.hook_event_name) {
     case "PreToolUse":
       if (input.tool_name !== "AskUserQuestion") return {};
       return { stdout: JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: ASK_INSTEAD } }) };
     case "Stop": {
-      const quiet = num(state.lastSentAt) <= num(state.lastStopAt);
-      const awayBeganThisTurn = num(state.awayStartedAt) > num(state.lastStopAt);
+      const quiet = num(project.lastSentAt) <= num(project.lastStopAt);
+      const awayBeganThisTurn = num(project.awayStartedAt) > num(project.lastStopAt);
       if (input.stop_hook_active || !quiet || awayBeganThisTurn) return { patch: { lastStopAt: now } };
       return { stdout: JSON.stringify({ decision: "block", reason: NOTE_FIRST }) };
     }
     case "StopFailure": {
       const details = input.error_details ? ` (${input.error_details})` : "";
-      const outbox = Array.isArray(state.outbox) ? state.outbox : [];
+      const outbox = Array.isArray(project.outbox) ? project.outbox : [];
       return { patch: { outbox: [...outbox, { type: "error", text: `Claude stopped: ${input.error ?? "unknown error"}${details}` }] } };
     }
     case "UserPromptSubmit":
@@ -60,33 +67,65 @@ export function decide(input: Obj, state: Obj | null, now: number): Decision {
   return {};
 }
 
-async function readState(file: string): Promise<Obj | null> {
+function read(file: string): Obj | null {
   try {
-    return (await Bun.file(file).json()) as Obj;
+    return JSON.parse(readFileSync(file, "utf8")) as Obj;
   } catch {
     return null;
   }
 }
+const projectsOf = (s: Obj | null): Record<string, Obj> => (s?.projects ?? {}) as Record<string, Obj>;
+
+/** Same protocol as the server's store lock: wx create, stale after 5 s, retry 50 ms up to 2 s. */
+function lock(path: string): boolean {
+  for (let waited = 0; waited <= 2000; waited += 50) {
+    try {
+      closeSync(openSync(path, "wx"));
+      return true;
+    } catch {
+      try {
+        if (Date.now() - statSync(path).mtimeMs > 5000) unlinkSync(path);
+      } catch {
+        // Lock vanished between the two calls: just retry.
+      }
+      Bun.sleepSync(50);
+    }
+  }
+  return false;
+}
+
+/** Merge a patch into one project's entry under the lock; a missing entry is left alone. */
+function apply(dir: string, key: string, patch: Obj): void {
+  const file = `${dir}/state.json`;
+  const path = `${dir}/state.lock`;
+  if (!lock(path)) return; // Can't get the lock: skip rather than race the server.
+  try {
+    const latest = read(file);
+    const entry = projectsOf(latest)[key];
+    if (!latest || !entry) return;
+    const next = { ...latest, projects: { ...projectsOf(latest), [key]: { ...entry, ...patch } } };
+    const tmp = `${file}.${process.pid}.tmp`;
+    writeFileSync(tmp, JSON.stringify(next, null, 2), { mode: 0o600 });
+    renameSync(tmp, file);
+  } finally {
+    unlinkSync(path);
+  }
+}
 
 if (import.meta.main) {
-  const file = `${process.env.CLAUDE_PLUGIN_DATA ?? ""}/state.json`;
-  const state = process.env.CLAUDE_PLUGIN_DATA ? await readState(file) : null;
-  if (isAway(state, Date.now())) {
+  const dir = process.env.CLAUDE_PLUGIN_DATA ?? "";
+  const state = dir ? read(`${dir}/state.json`) : null;
+  const now = Date.now();
+  if (Object.values(projectsOf(state)).some((p) => isAway(p, now))) {
     let input: Obj = {};
     try {
       input = JSON.parse((await Bun.stdin.text()).replace(/^﻿/, "") || "{}") as Obj;
     } catch {
       // Unreadable hook input: do nothing rather than fail the user's tool call.
     }
-    const d = decide(input, state, Date.now());
-    if (d.patch) {
-      // ponytail: re-read just before writing to keep the race with the server to milliseconds;
-      // a lock file would close it fully if it ever matters.
-      const latest = (await readState(file)) ?? state;
-      const tmp = `${file}.${process.pid}.tmp`;
-      await Bun.write(tmp, JSON.stringify({ ...latest, ...d.patch }, null, 2));
-      renameSync(tmp, file);
-    }
+    const key = projectKeyOf(input);
+    const d = decide(input, projectsOf(state)[key] ?? null, now);
+    if (d.patch) apply(dir, key, d.patch);
     if (d.stdout) await Bun.write(Bun.stdout, d.stdout);
   }
 }

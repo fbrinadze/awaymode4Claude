@@ -1,5 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { freshProject, readStore, withStore } from "./store.ts";
 
 export interface Question {
   id: string;
@@ -14,6 +13,13 @@ export interface Permission {
   tool: string;
   /** Epoch ms when the request arrived. */
   at: number;
+  /** Server instance that raised it; only that server may deliver its verdict. */
+  instance?: string;
+  /** Full redacted command preview, kept for `more <id>`. */
+  preview?: string;
+  /** Too long to show inline: approvable only after `more <id>` sent it all. */
+  needsMore?: boolean;
+  moreSent?: boolean;
 }
 
 export interface State {
@@ -53,21 +59,32 @@ export const fresh = (): State => ({
 
 export const isAway = (s: State, now: number): boolean => s.awayUntil > now;
 
-const file = (dir: string) => join(dir, "state.json");
-
-/** Missing or corrupt state loads as fresh: unpaired, so it fails closed. */
-export function load(dir: string): State {
-  try {
-    return { ...fresh(), ...JSON.parse(readFileSync(file(dir), "utf8")) };
-  } catch {
-    return fresh();
-  }
+// This server's own project in the v2 store; index.ts sets it at start, tests use the default.
+let mine = { key: "default", tag: "" };
+export function setProject(key: string, tag: string): void {
+  mine = { key, tag };
 }
 
-/** Write to a temp file then rename, so a hook never reads half a file. */
-export function save(dir: string, s: State): void {
-  mkdirSync(dir, { recursive: true });
-  const tmp = `${file(dir)}.${process.pid}.tmp`;
-  writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
-  renameSync(tmp, file(dir));
+/** This project's view of state.json: shared pairing and cursor plus its own entry. Fails closed. */
+export function load(dir: string): State {
+  const s = readStore(dir, Date.now(), mine);
+  const p = s.projects[mine.key] ?? freshProject(mine.tag);
+  return {
+    awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
+    permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
+    awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
+  };
+}
+
+/** Write this project's view back under the lock (0600, temp file then rename). */
+export function save(dir: string, v: State): void {
+  withStore(dir, Date.now(), (s) => {
+    Object.assign(s, { me: v.me, cursor: v.cursor, nextQ: v.nextQ });
+    const p = s.projects[mine.key] ?? freshProject(mine.tag);
+    s.projects[mine.key] = {
+      ...p, tag: p.tag || mine.tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
+      lastSentAt: v.lastSentAt, lastStopAt: v.lastStopAt, awayStartedAt: v.awayStartedAt,
+      sessionId: v.awaySession, outbox: v.outbox,
+    };
+  }, mine);
 }
