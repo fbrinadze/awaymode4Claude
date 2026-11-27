@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
-import { createAuth } from "./auth.ts";
+import { BOT_SCOPES, createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import { doctorTool } from "./doctor.ts";
 import type { Net } from "./http.ts";
@@ -47,7 +47,7 @@ const botSecret = setting(process.env.AWAY_BOT_SECRET);
 const net: Net = { fetch: (url, init) => fetch(url, init), sleep: (ms) => new Promise((r) => setTimeout(r, ms)) };
 const auth =
   tenantId && botId && botSecret
-    ? createAuth({ tenantId, clientId: botId, botSecret }, net, secretStore(dir), Date.now)
+    ? createAuth({ authority: tenantId, clientId: botId, scopes: BOT_SCOPES, botSecret },net, secretStore(dir), Date.now)
     : null;
 
 // Swappable so a successful setup switches to Teams without a restart.

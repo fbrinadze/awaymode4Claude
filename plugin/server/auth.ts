@@ -2,10 +2,13 @@ import { call, form, HttpError, type Json, type Net } from "./http.ts";
 import type { SecretStore } from "./secrets.ts";
 
 export interface AuthConfig {
-  tenantId: string;
-  /** One app registration is both the bot and the public sign-in client. */
+  /** Tenant ID, or `organizations` for the shared Graph tools app. */
+  authority: string;
+  /** The public sign-in client (on the bot route it is also the bot's app). */
   clientId: string;
-  botSecret: string;
+  scopes: string;
+  /** Bot route only. */
+  botSecret?: string;
 }
 
 export interface DeviceCode {
@@ -19,7 +22,10 @@ export interface DeviceCode {
 export type Auth = ReturnType<typeof createAuth>;
 
 // offline_access is a sign-in scope, not a Graph permission: without it there's no refresh token.
-const SCOPES = "User.Read Chat.Read TeamsAppInstallation.ReadWriteSelfForUser offline_access";
+export const BOT_SCOPES = "User.Read Chat.Read TeamsAppInstallation.ReadWriteSelfForUser offline_access";
+export const WORKFLOW_SCOPES = "User.Read Chat.Read offline_access";
+/** Microsoft Graph Command Line Tools: a public client any tenant user can sign in with. */
+export const GRAPH_TOOLS_ID = "14d82eec-204b-4c2f-b7e8-296a70dab67e";
 const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const REFRESH = "graph-refresh-token";
 const SIGN_IN_AGAIN = new Set(["invalid_grant", "interaction_required"]);
@@ -36,7 +42,7 @@ interface Cached {
 }
 
 export function createAuth(cfg: AuthConfig, net: Net, store: SecretStore, now: () => number) {
-  const base = `https://login.microsoftonline.com/${cfg.tenantId}/oauth2/v2.0`;
+  const base = `https://login.microsoftonline.com/${cfg.authority}/oauth2/v2.0`;
   let graph: Cached | null = null;
   let bot: Cached | null = null;
 
@@ -53,7 +59,7 @@ export function createAuth(cfg: AuthConfig, net: Net, store: SecretStore, now: (
   }
 
   async function startDeviceCode(): Promise<DeviceCode> {
-    const r = await call(net, `${base}/devicecode`, form({ client_id: cfg.clientId, scope: SCOPES }));
+    const r = await call(net, `${base}/devicecode`, form({ client_id: cfg.clientId, scope: cfg.scopes }));
     return {
       deviceCode: String(r.device_code),
       message: String(r.message),
@@ -84,7 +90,7 @@ export function createAuth(cfg: AuthConfig, net: Net, store: SecretStore, now: (
     const refresh = await store.get(REFRESH);
     if (!refresh) throw new SignedOut();
     try {
-      const body = form({ grant_type: "refresh_token", client_id: cfg.clientId, refresh_token: refresh, scope: SCOPES });
+      const body = form({ grant_type: "refresh_token", client_id: cfg.clientId, refresh_token: refresh, scope: cfg.scopes });
       await keep(await call(net, `${base}/token`, body));
     } catch (e) {
       if (e instanceof HttpError && SIGN_IN_AGAIN.has(String(e.body.error))) {
@@ -97,6 +103,7 @@ export function createAuth(cfg: AuthConfig, net: Net, store: SecretStore, now: (
   }
 
   async function botToken(): Promise<string> {
+    if (!cfg.botSecret) throw new Error("No bot on this route.");
     if (bot && bot.expiresAt > now()) return bot.token;
     const body = form({
       grant_type: "client_credentials",
