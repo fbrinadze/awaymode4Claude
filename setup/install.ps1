@@ -52,9 +52,23 @@ if (-not (Have bun)) {
   if (-not (Have bun)) { throw "Bun didn't install. Install it from https://bun.sh, open a new window, and run this again." }
 }
 # Claude Code only sees the PATH it started with, and terminals opened before Bun was installed
-# keep the old one. Save Bun's real path (the .exe, never an npm .cmd shim) so the plugin can run it.
+# keep the old one. Find Bun's real path (the .exe, never an npm .cmd shim), then hardlink it into
+# WindowsApps: that folder is on every user's default PATH and writable without admin rights, so a
+# plain "bun" resolves even in a terminal that predates Bun. Hardlinks don't follow Bun updates,
+# so a stale link is replaced when size or timestamp differ from the real file.
 $bunPath = (& bun -e "console.log(process.execPath)" | Out-String).Trim()
 if (-not $bunPath -or -not (Test-Path $bunPath)) { throw "Couldn't find where Bun is installed." }
+$bunLink = "$env:LOCALAPPDATA\Microsoft\WindowsApps\bun.exe"
+try {
+  $real = Get-Item $bunPath
+  $cur = Get-Item $bunLink -ErrorAction SilentlyContinue
+  if (-not $cur -or $cur.Length -ne $real.Length -or $cur.LastWriteTime -ne $real.LastWriteTime) {
+    if ($cur) { Remove-Item $bunLink -Force -ErrorAction Stop }
+    New-Item -ItemType HardLink -Path $bunLink -Target $bunPath -ErrorAction Stop | Out-Null
+  }
+} catch {
+  Write-Warning "Bun wasn't linked; if Away Mode can't find Bun, fully restart your terminal app"
+}
 if (-not (Test-Native { az account show })) {
   & az login | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "az login failed." }
@@ -125,7 +139,7 @@ if ($LASTEXITCODE -ne 0) { throw "Couldn't add or refresh the Away Mode marketpl
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to update it instead." }
 & claude plugin update $plugin
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
-@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; bun_path = $bunPath; sessions = $Sessions; reply_routing = $ReplyRouting } |
+@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; sessions = $Sessions; reply_routing = $ReplyRouting } |
   ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }
 $app.Secret = $null

@@ -77,9 +77,7 @@ If the terminal closes after you sign in, start Claude Code again and say "I sig
 
 ## Troubleshooting
 
-- **Away Mode's server won't start, or hooks say `bun` isn't found.** Claude Code only sees the PATH it was started with. On Windows, terminal apps like Windows Terminal and VS Code keep the PATH they had when they opened, even in a new tab, so Bun installed afterwards is invisible to them. Either:
-  - set **Bun path** under `/plugin` → Away Mode to the full path of `bun.exe` (run `bun -e "console.log(process.execPath)"` in any window where `bun` works). The Windows installer does this for you, or
-  - fully quit your terminal app (every window) and open it again.
+- **Away Mode's server won't start, or hooks say `bun` isn't found.** Claude Code only sees the PATH it was started with, and terminal apps like Windows Terminal and VS Code keep the PATH they had when they opened, so Bun installed afterwards can be invisible to them. The Windows installer links Bun into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is always on PATH. After a Bun update, rerun the installer to refresh that link. If the installer warned that Bun wasn't linked, fully quit your terminal app (every window) and open it again.
 
 ## Removing it
 

@@ -4,28 +4,28 @@
     "PostToolUse": [
       {
         "matcher": "mcp__plugin_away-mode_away__set_away",
-        "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ],
     "PreToolUse": [
       {
         "matcher": "AskUserQuestion",
-        "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ],
     "Stop": [
       {
-        "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ],
     "StopFailure": [
       {
-        "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ],
     "UserPromptSubmit": [
       {
-        "hooks": [{ "type": "command", "command": "${user_config.bun_path}", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
+        "hooks": [{ "type": "command", "command": "bun", "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/hook.ts"], "timeout": 10 }]
       }
     ]
   }
