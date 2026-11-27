@@ -24,7 +24,8 @@ function deps(over: Partial<DoctorDeps> = {}, me: () => unknown = () => ({ id: "
 }
 const pair = (dir: string) => {
   writeFileSync(join(dir, "teams.json"), JSON.stringify({ tenantId: "tid", botId: "bot", chatId: "19:c", me: "user-1" }));
-  writeFileSync(join(dir, "state.json"), JSON.stringify({ version: 2, me: "user-1", cursor: "", nextQ: 1, lease: null, projects: {} }));
+  // Owner-only, as the real store writes it; the doctor flags anything looser on macOS/Linux.
+  writeFileSync(join(dir, "state.json"), JSON.stringify({ version: 2, me: "user-1", cursor: "", nextQ: 1, lease: null, projects: {} }), { mode: 0o600 });
 };
 const run = async (d: DoctorDeps, args = {}) => (await doctorTool(d).run(args)).split("\n");
 
