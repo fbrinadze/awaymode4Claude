@@ -1,11 +1,12 @@
 import { homedir } from "node:os";
-import { basename, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
 import { createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import type { Net } from "./http.ts";
+import { baseTag, projectKey } from "./project.ts";
+import { setProject } from "./state.ts";
 import { secretStore } from "./secrets.ts";
 import { setupTool } from "./setup.ts";
 
@@ -24,8 +25,6 @@ const list = (v: string | undefined, fallback: string[]): string[] => {
   if (v === undefined || v.includes("${")) return fallback;
   return v.split(",").map((s) => s.trim()).filter(Boolean);
 };
-/** The folder name to show in Teams; none when Claude Code was started in the home folder. */
-const projectName = (dir: string): string => (resolve(dir) === resolve(homedir()) ? "" : basename(dir));
 /** An unset userConfig value may arrive empty or as the literal ${user_config.…} placeholder. */
 const setting = (v: string | undefined): string => (v && !v.includes("${") ? v.trim() : "");
 
@@ -34,6 +33,9 @@ if (!dir) {
   console.error("away-mode: CLAUDE_PLUGIN_DATA is not set");
   process.exit(1);
 }
+const projectDir = process.env.CLAUDE_PROJECT_DIR ?? process.cwd();
+const tag = baseTag(projectDir, homedir());
+setProject(projectKey(projectDir), tag);
 
 const tenantId = setting(process.env.AWAY_TENANT_ID);
 const botId = setting(process.env.AWAY_BOT_ID);
@@ -59,7 +61,7 @@ const away = createAway({
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
   ],
   dir,
-  project: projectName(process.env.CLAUDE_PROJECT_DIR ?? process.cwd()),
+  project: tag,
   hours: num(process.env.AWAY_HOURS, 9),
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
   neverRelay: list(process.env.AWAY_NEVER_RELAY, ["rm -rf", "git push --force", "deploy"]),
