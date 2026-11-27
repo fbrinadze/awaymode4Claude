@@ -79,8 +79,29 @@ test("create-app has a workflow mode without a secret", () => {
   expect(setupText("create-app.sh")).toContain("--workflow");
 });
 
-test("URL prompt is AsSecureString and never goes on a command line", () => {
+test("installer keeps the bot route on re-run and sets teams_route for bot", () => {
   const ps = setupText("install.ps1");
+  expect(ps).toContain('$settings.teams_route = "bot"');
+  expect(ps).toContain("displayName eq '$Name'");
+  expect(ps).toContain("keeping the bot route");
+});
+
+test("every setup .ps1 stays within 150 lines, with a stray-backtick-free install.ps1", () => {
+  for (const f of ["install.ps1", "install-workflow.ps1", "install-bot.ps1", "create-app.ps1"]) {
+    expect(setupText(f).split(/\r?\n/).length - 1).toBeLessThanOrEqual(150);
+  }
+  expect(setupText("install.ps1")).not.toContain("`,");
+});
+
+test("workflow URL must be https and is retried at most 3 times", () => {
+  const ps = setupText("install-workflow.ps1");
+  expect(ps).toContain("'^https://\\S+$'");
+  expect(ps).toContain("That doesn't look like the workflow's HTTPS URL");
+  expect(ps).toContain("1..3");
+});
+
+test("URL prompt is AsSecureString and never goes on a command line", () => {
+  const ps = setupText("install.ps1") + setupText("install-workflow.ps1");
   expect(ps).toContain("Read-Host");
   expect(ps).toContain("-AsSecureString");
   expect(ps).toContain("workflow_url");

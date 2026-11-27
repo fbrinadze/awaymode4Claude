@@ -34,10 +34,6 @@ $ErrorActionPreference = "Stop"
 $plugin = "away-mode@awaymode"
 $launch = "claude --dangerously-load-development-channels plugin:$plugin"
 
-if (-not $Route) {
-  $admin = Read-Host "Do you have a Teams admin who can add the Away Mode app? (y/N)"
-  $Route = if ($admin -match '^(y|yes)$') { "bot" } else { "workflow" }
-}
 function Step($text) { Write-Host ""; Write-Host "== $text" -ForegroundColor Cyan }
 function Have($cmd) { [bool](Get-Command $cmd -ErrorAction SilentlyContinue) }
 # True/false for a native command. Windows PowerShell 5.1 turns redirected native stderr into a
@@ -46,6 +42,16 @@ function Test-Native([scriptblock]$Run) {
   $old = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   try { & $Run 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) } finally { $ErrorActionPreference = $old }
+}
+
+# A bot app registered by an earlier run means this is a bot install: keep it, don't ask again.
+if (-not $Route -and (Have az) -and (Test-Native { az account show })) {
+  $botId = (& az ad app list --filter "displayName eq '$Name'" --query "[0].appId" -o tsv | Out-String).Trim()
+  if ($botId) { $Route = "bot"; Write-Host "Found your existing Away Mode bot app; keeping the bot route (use -Route workflow to switch)." }
+}
+if (-not $Route) {
+  $admin = Read-Host "Do you have a Teams admin who can add the Away Mode app? (y/N)"
+  $Route = if ($admin -match '^(y|yes)$') { "bot" } else { "workflow" }
 }
 
 # 1. Prerequisites
@@ -90,84 +96,17 @@ $settings = @{ sessions = $Sessions; reply_routing = $ReplyRouting }
 $graphWarning = "Microsoft's Graph tools app may carry more permissions than Away Mode needs in your organisation (anything already approved for it). Use your own app registration if you can."
 if ($Route -eq "workflow") {
   # No admin route: your own app registration (or the Graph tools fallback) plus a workflow URL.
-  Step "Setting up the workflow route"
-  $tenant = (& az account show --query tenantId -o tsv | Out-String).Trim()
-  if ($SignInApp -eq "graph-tools") {
-    Write-Warning $graphWarning
-  } elseif ($SignInApp) {
-    Write-Host "Using sign-in app $SignInApp."
-  } else {
-    try {
-      $wf = @(& (Join-Path $PSScriptRoot "create-app.ps1") -Mode workflow -PassThru)[-1]
-      $SignInApp = $wf.AppId
-      $tenant = $wf.TenantId
-    } catch {
-      Write-Warning "Couldn't create the sign-in app: $($_.Exception.Message)"
-      Write-Host "Your organisation may block app registration. The fallback is Microsoft's Graph tools app:" -ForegroundColor Yellow
-      Write-Host "  $graphWarning"
-      throw "Stopped. Ask IT for an app registration, or rerun with -SignInApp graph-tools to accept the fallback."
-    }
-  }
-  Write-Host "Paste the Power Automate Workflow URL (it stays hidden, and goes straight into your OS keychain)."
-  $secureUrl = Read-Host "Workflow URL" -AsSecureString
-  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureUrl)
-  try { $workflowUrl = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr) }
-  finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
-  if (-not $workflowUrl) { throw "No workflow URL entered." }
-  $settings.teams_route = "workflow"
-  $settings.sign_in_app = $SignInApp
-  $settings.tenant_id = $tenant
-  $settings.workflow_url = $workflowUrl
+  . (Join-Path $PSScriptRoot "install-workflow.ps1")
+  foreach ($kv in (Get-WorkflowSettings $SignInApp).GetEnumerator()) { $settings[$kv.Key] = $kv.Value }
 }
 if ($Route -eq "bot") {
 # 2. Azure app registration, bot and Teams package (reused if they exist). The secret stays in $app.
 Step "Creating (or reusing) the Azure app and bot"
 $app = @(& (Join-Path $PSScriptRoot "create-app.ps1") -Name $Name -ResourceGroup $ResourceGroup -Location $Location -PassThru)[-1]
 
-# 3. Who gets the Teams app: you, plus anyone in -ForUsers.
-$userIds = @(az ad signed-in-user show --query id -o tsv)
-foreach ($u in $ForUsers) {
-  $id = az ad user show --id $u --query id -o tsv
-  if ($LASTEXITCODE -eq 0 -and $id) { $userIds += $id } else { Write-Warning "Couldn't find $u in your directory; skipping." }
-}
-$userIds = @($userIds | Select-Object -Unique)
-
-# 4. Teams: publish to your org's apps, then make it available to and install it for those users.
-Step "Adding Away Mode to Teams for $($userIds.Count) user(s)"
-$version = (Get-Content (Join-Path $PSScriptRoot "teams-app\manifest.json") -Raw | ConvertFrom-Json).version
-$catalogId = $null
-try {
-  if (-not (Get-Module -ListAvailable -Name MicrosoftTeams)) {
-    Write-Host "Installing the MicrosoftTeams PowerShell module for your account..."
-    Install-Module MicrosoftTeams -Scope CurrentUser -Force -AllowClobber
-  }
-  Import-Module MicrosoftTeams
-  Write-Host "Signing in to Teams (a Microsoft sign-in window will open)..."
-  Connect-MicrosoftTeams | Out-Null
-  $teamsApp = try { Get-TeamsApp -ExternalId $app.AppId } catch { $null }
-  if ($teamsApp) {
-    # Push the current package (new icon or version); Teams refuses an unchanged version, which is fine.
-    try { Set-TeamsApp -Id $teamsApp.Id -Path $app.Zip | Out-Null; Write-Host "Updated Away Mode in your org's Teams apps." }
-    catch { Write-Host "Away Mode is already in your org's Teams apps." }
-  } else {
-    $teamsApp = New-TeamsApp -DistributionMethod organization -Path $app.Zip
-    Write-Host "Published Away Mode to your org's Teams apps."
-  }
-  $catalogId = $teamsApp.Id
-  Update-M365TeamsApp -Id $catalogId -AppAssignmentType UsersAndGroups -Users $userIds -OperationType Add
-  Update-M365TeamsApp -Id $catalogId -IsBlocked $false -AppInstallType UsersAndGroups `
-    -InstallForOperationType Add -InstallForUsers $userIds -InstallVersion $version
-  Write-Host "Away Mode is available to and installed for $($userIds.Count) user(s). It can take a few minutes to show up in Teams."
-} catch {
-  $idText = if ($catalogId) { $catalogId } else { "<Away Mode's App ID in the Teams admin center>" }
-  Write-Warning "Couldn't finish the Teams part: $($_.Exception.Message)"
-  Write-Host "This needs a Teams admin. Send them this:" -ForegroundColor Yellow
-  Write-Host "  1. Teams admin center > Teams apps > Manage apps > Upload new app: $($app.Zip)"
-  Write-Host "  2. In PowerShell with the MicrosoftTeams module (Connect-MicrosoftTeams first):"
-  Write-Host "     Update-M365TeamsApp -Id $idText -AppAssignmentType UsersAndGroups -Users $($userIds -join ',') -OperationType Add"
-  Write-Host "     Update-M365TeamsApp -Id $idText -AppInstallType UsersAndGroups -InstallForOperationType Add -InstallForUsers $($userIds -join ',') -InstallVersion $version"
-  Write-Host "Carrying on with the Claude Code part."
-}
+. (Join-Path $PSScriptRoot "install-bot.ps1")
+Publish-TeamsApp $app $ForUsers
+$settings.teams_route = "bot"
 $settings.tenant_id = $app.TenantId
 $settings.bot_app_id = $app.AppId
 $settings.bot_secret = $app.Secret
@@ -190,12 +129,12 @@ if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a probl
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
 $settings | ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }
-$settings = $null; $workflowUrl = $null
+$settings = $null
 if ($app) { $app.Secret = $null }
 Write-Host "Plugin installed and configured."
 
 Step "All set"
 Write-Host "1. Start Claude Code with:"
 Write-Host "     $launch" -ForegroundColor Green
-Write-Host "2. Run /away-mode:setup: sign in with the code it shows`, then reply hi to Away Mode in Teams."
+Write-Host "2. Run /away-mode:setup: sign in with the code it shows, then reply hi to Away Mode in Teams."
 Write-Host "3. When you step away, just say so, for example: going to lunch, back at 1:30."
