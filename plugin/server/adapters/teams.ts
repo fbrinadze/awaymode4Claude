@@ -53,6 +53,7 @@ const toTeams = (text: string): string =>
 interface GraphMsg {
   id: string;
   messageType?: string;
+  createdDateTime?: string;
   lastModifiedDateTime: string;
   lastEditedDateTime?: string | null;
   deletedDateTime?: string | null;
@@ -94,7 +95,10 @@ export function teamsAdapter(dir: string, cfg: TeamsConfig, auth: Auth, net: Net
       const r = await call(net, `${GRAPH}/chats/${encodeURIComponent(cfg.chatId)}/messages?${q}`, bearer(await auth.graphToken()));
       const page = ((r.value ?? []) as GraphMsg[]).slice().reverse();
       return page.filter(isReply).map(
-        (m): Msg => ({ id: m.id, from: m.from!.user!.id!, text: htmlToText(m.body?.content ?? ""), at: m.lastModifiedDateTime }),
+        (m): Msg => ({
+          id: m.id, from: m.from!.user!.id!, text: htmlToText(m.body?.content ?? ""),
+          at: m.lastModifiedDateTime, sentAt: m.createdDateTime,
+        }),
       );
     },
 

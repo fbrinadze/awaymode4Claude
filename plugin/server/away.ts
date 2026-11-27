@@ -1,11 +1,13 @@
 import type { Adapter } from "./adapters/adapter.ts";
+import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
-import { adopt, claimOwner, drainOwned, makeAct } from "./deliver.ts";
-import { pollCycle } from "./poller.ts";
+import { adopt, drainOwned, makeAct } from "./deliver.ts";
+import { pollCycle, sweepExpired } from "./poller.ts";
+import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
 import { redact } from "./sensitive.ts";
-import { isAway, load, save, type State } from "./state.ts";
+import { isAway, load, save, tagOf, type State } from "./state.ts";
 import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
@@ -53,7 +55,6 @@ export function createAway(d: Deps) {
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
   }
-
   /** Load, change, save with no await in between, so concurrent handlers can't clobber state. */
   function update(fn: (s: State) => void): State {
     const s = current();
@@ -61,31 +62,38 @@ export function createAway(d: Deps) {
     save(d.dir, s, key);
     return s;
   }
-
   const away = () => isAway(current(), d.now());
-  const say = (text: string) => {
-    const full = redact(`[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`);
+  const announce = (name: string, text: string) => {
+    const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
+  const say = (text: string) => announce(d.project, text);
+  const life = { dir: d.dir, key, instance, now: d.now };
+  const end = (reason: EndReason) => endProject(life, reason);
+  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, deliverLocal: (r: Routed) => act(r.action), announce });
 
   function startPolling(): void {
     if (polling) return;
     polling = true;
-    void pollLoop({ fetch: pollOnce, away, sleep: d.sleep }).finally(() => {
-      polling = false;
-    });
-    // The inbox has its own short timer: the Graph poll's backoff must not delay a second project's replies.
+    const fail = (what: string) => (e: Error) => console.error(`away-mode: ${what} failed: ${e.message}`);
+    void pollLoop({ fetch: pollOnce, away, sleep: d.sleep })
+      .then(() => sweepExpired(poller()))
+      .catch(fail("expiry"))
+      .finally(() => void (polling = false));
+    // Own short timer (Graph backoff mustn't delay a second project's replies); one last pass after away flips off sends a terminal recap.
     void (async () => {
-      while (away()) {
-        await drainMine().catch((e) => console.error(`away-mode: inbox failed: ${(e as Error).message}`));
-        await d.sleep(MIN_DELAY);
+      for (let on = true; on; ) {
+        on = away();
+        await drainMine().catch(fail("inbox"));
+        if (on) await d.sleep(MIN_DELAY);
       }
     })();
   }
 
-  /** Timeouts first (so a late answer can't hit a closed question), then queued alerts, then actions other servers queued for us, then the (leased) poll. */
   /** Owner only. Away is re-checked before each item, so nothing is acted on after `back`. */
   async function drainMine(): Promise<void> {
+    const ended = endedAtTerminal(life);
+    if (ended) await say(ended);
     adopt(d.dir, key, instance, d.now());
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
   }
@@ -94,7 +102,7 @@ export function createAway(d: Deps) {
     await relay.sweepTimeouts();
     await relay.drainOutbox();
     await drainMine();
-    return pollCycle({ dir: d.dir, key, now: d.now, adapter: d.adapter, deliverLocal: (r) => act(r.action) });
+    return pollCycle(poller());
   }
 
   async function answer(id: string, text: string): Promise<void> {
@@ -117,7 +125,7 @@ export function createAway(d: Deps) {
 
   const act = makeAct({
     dir: d.dir, key, instance, now: d.now, hours: d.hours, current, update, say, channel, answer,
-    notify: (m, p) => server.notify(m, p),
+    notify: (m, p) => server.notify(m, p), end,
   });
 
   const relay = createRelay({
@@ -126,7 +134,7 @@ export function createAway(d: Deps) {
     endOfDay: d.endOfDay ?? "park",
   });
 
-  const ctx = { deps: d, current, update, say, startPolling, claimOwner: () => claimOwner(d.dir, key, instance, d.now()) };
+  const ctx = { deps: d, current, update, say, startPolling, startAway: (until: number) => beginAway(life, tagOf(key), until), endAway: end };
   const server = createServer(
     { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: [...makeTools(ctx), ...(d.extraTools?.(ctx) ?? [])], onNotification },
     d.write,

@@ -2,6 +2,8 @@
 import type { Adapter, Msg } from "./adapters/adapter.ts";
 import { dispatch, type Routed } from "./dispatch.ts";
 import { releaseLease, takeLease } from "./lease.ts";
+import { tagFor } from "./project.ts";
+import { endAway } from "./recap.ts";
 import type { Action } from "./route.ts";
 import { withStore } from "./store.ts";
 
@@ -11,6 +13,8 @@ export interface PollerDeps {
   now(): number;
   adapter: Adapter;
   deliverLocal(r: Routed): Promise<void>;
+  /** Post a message labelled with a project's tag. */
+  announce(tag: string, text: string): Promise<void>;
 }
 
 /** The cursor to poll from if this project is away and holds the lease, else null. */
@@ -43,8 +47,19 @@ function routeOne(d: PollerDeps, m: Msg): Routed {
   });
 }
 
+/** Projects whose time ran out are ended under the lock, so exactly one server sends each recap. */
+export async function sweepExpired(d: PollerDeps): Promise<void> {
+  const t = d.now();
+  const recaps = withStore(d.dir, t, (s) =>
+    Object.entries(s.projects)
+      .filter(([, p]) => p.awayUntil > 0 && p.awayUntil <= t)
+      .map(([k, p]) => ({ tag: tagFor(k, s), text: endAway(p, "expired") })));
+  for (const r of recaps) await d.announce(r.tag, r.text);
+}
+
 /** One poll cycle; returns how many messages arrived (0 when not the holder). Graph I/O stays outside the lock. */
 export async function pollCycle(d: PollerDeps): Promise<number> {
+  await sweepExpired(d);
   const cursor = claim(d);
   if (cursor === null) return 0;
   const msgs = await d.adapter.poll(cursor);

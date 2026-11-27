@@ -65,6 +65,9 @@ export function setProject(key: string, tag: string): void {
   mine = { key, tag };
 }
 
+/** The tag a new entry for this key gets (only this server's own project has one). */
+export const tagOf = (key: string): string => (key === mine.key ? mine.tag : "");
+
 /** This project's view of state.json: shared pairing and cursor plus its own entry. Fails closed. */
 export function load(dir: string, key = mine.key): State {
   const me = { key, tag: key === mine.key ? mine.tag : "" };

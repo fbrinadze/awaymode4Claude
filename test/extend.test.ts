@@ -13,7 +13,7 @@ function env(awayUntil: number) {
   const act = makeAct({
     dir: mkdtempSync(join(tmpdir(), "away-ext-")), key: "/x/order-portal", instance: "i1", hours: 9,
     now: () => T, current: () => st, update: (fn) => (fn(st), st), say: async (t) => void said.push(t),
-    notify: () => {}, channel: () => {}, answer: async () => {},
+    notify: () => {}, channel: () => {}, answer: async () => {}, end: () => "",
   });
   return { st, said, act };
 }

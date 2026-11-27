@@ -1,5 +1,6 @@
 // Per-project delivery: acting on a routed action, and which server instance owns delivery.
 import { LEASE_MS } from "./lease.ts";
+import type { EndReason } from "./recap.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
 import { more } from "./more.ts";
 import { tagFor } from "./project.ts";
@@ -23,14 +24,8 @@ export interface DeliverEnv {
   notify(method: string, params: Record<string, unknown>): void;
   channel(content: string, meta: Record<string, string>): void;
   answer(id: string, text: string): Promise<void>;
-}
-
-/** set_away on: this server now owns delivery for its project. */
-export function claimOwner(dir: string, key: string, instance: string, now: number): void {
-  withStore(dir, now, (s) => {
-    const p = s.projects[key];
-    if (p) Object.assign(p, { ownerInstance: instance, ownerSeen: now });
-  });
+  /** End this project's away mode; returns the recap. */
+  end(reason: EndReason): string;
 }
 
 /** An away project whose owner hasn't been seen for LEASE_MS is taken over, pending permissions with it. */
@@ -91,9 +86,8 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
       case "more": return more(e, a.id);
       case "snooze": case "unsnooze": return e.say("Coming soon."); // delivery lands in a later task
       case "back":
-        e.update((s) => void (s.awayUntil = 0));
         e.channel("The user ended away mode from Teams.", { kind: "back" });
-        return e.say("Away mode off. Welcome back.");
+        return e.say(e.end("back"));
     }
   };
 }
