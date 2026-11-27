@@ -1,6 +1,7 @@
 // state.json v2: shared fields plus one entry per project, written only under state.lock.
-import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { lock } from "./lock.ts";
 import type { Action } from "./route.ts";
 import type { Permission, Question } from "./state.ts";
 
@@ -42,11 +43,7 @@ export interface Store {
   projects: Record<string, ProjectState>;
 }
 
-export const LOCK_STALE_MS = 5_000;
-export const LOCK_WAIT_MS = 2_000;
-
-/** Another process held the lock for longer than LOCK_WAIT_MS. */
-export class StateBusy extends Error {}
+export { LOCK_STALE_MS, LOCK_WAIT_MS, StateBusy } from "./lock.ts";
 
 export const freshProject = (tag: string): ProjectState => ({
   tag, ownerSeen: 0, awayUntil: 0, awayStartedAt: 0, snoozeUntil: 0,
@@ -110,37 +107,6 @@ export function readStore(dir: string, _now: number, migrateTo?: { key: string; 
     if (!idle(ps)) projects[k] = ps;
   }
   return { version: 2, me: str(v.me), cursor: str(v.cursor), nextQ: num(v.nextQ, 1), lease, projects };
-}
-
-/** The lock file holds its owner's pid. True when that process is gone (EPERM means alive). */
-function holderDead(path: string): boolean {
-  const pid = Number.parseInt(readFileSync(path, "utf8"), 10);
-  if (!(pid > 0)) return false; // Empty or unreadable: fall back to the age rule.
-  try {
-    process.kill(pid, 0);
-    return false;
-  } catch (e) {
-    return (e as NodeJS.ErrnoException).code === "ESRCH";
-  }
-}
-
-function lock(dir: string): string {
-  const path = join(dir, "state.lock");
-  const give = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      writeFileSync(path, String(process.pid), { flag: "wx" });
-      return path;
-    } catch {
-      try {
-        if (holderDead(path) || Date.now() - statSync(path).mtimeMs > LOCK_STALE_MS) rmSync(path, { force: true });
-      } catch {
-        // Gone between the open and the stat: retry at once.
-      }
-      if (Date.now() > give) throw new StateBusy("Away Mode state is busy; try again.");
-      Bun.sleepSync(50);
-    }
-  }
 }
 
 /** Lock, read, change, write (temp file, 0600, rename), unlock. */
