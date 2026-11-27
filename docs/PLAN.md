@@ -275,11 +275,11 @@ Each phase ends with a check that must pass before the next starts.
 ### Phase 3: Away experience and hooks
 
 - [x] `away`, `back` skills (brought forward: plain "going away" didn't turn away mode on in the live check)
-- [ ] `status` skill
-- [ ] `hook.ts`: question redirect, finished summary, API-error alert, auto-back
-- [ ] End-of-day policy, `never_relay`, sensitive-request guard (both directions)
+- [x] `status` skill and `status` tool
+- [x] `hook.ts`: question redirect, finished summary, API-error alert (queued in `state.json`, sent by the server), auto-back
+- [x] End-of-day policy, `never_relay`, sensitive-request guard (both directions)
 
-**Check:** all four triggers fire only while away; hooks add under 50 ms when off.
+**Check:** all four triggers fire only while away (unit tests per event, away and not away); hooks add under 50 ms when off (measured 38 ms total, 22 ms over Bun's own startup). Still to confirm live: a Teams reply must not end away mode. The hook ignores prompts that arrive as `<channel …>` events, but the docs don't say whether channel events trigger `UserPromptSubmit`.
 
 ### Phase 4: Harden and release v0.1.0
 
@@ -305,6 +305,7 @@ Each phase ends with a check that must pass before the next starts.
 | Channels are a [research preview](https://code.claude.com/docs/en/channels#research-preview). Custom channels need `--dangerously-load-development-channels` unless on Anthropic's allowlist or the org's `allowedChannelPlugins` | High | Document both paths. Admins add `away-mode` to `allowedChannelPlugins`. Apply for an Anthropic directory listing after v0.1. Keep channel code in one file |
 | Team/Enterprise orgs block channels until an Owner enables them; not on Bedrock, Vertex or Foundry | Medium | State requirements up front. The setup skill checks and stops with a clear message |
 | ~~Unverified: what Teams shows when the bot endpoint is unreachable~~ | Resolved | Live check, 26 Nov 2026: replies post to the chat and reach Claude through Graph with a placeholder endpoint. Plan B not needed |
+| Unverified: whether a channel event triggers the `UserPromptSubmit` hook | Medium | If it did, every Teams reply would end away mode. The hook ignores prompts starting with `<channel`; confirm in the Phase 3 live check |
 | Tenants block custom app upload, and the admin center's availability page can fail | Medium | `install.ps1` publishes with the Teams PowerShell module and sets availability and installs with `Update-M365TeamsApp`; docs/SETUP.md "Tenant notes" covers doing it by hand |
 | The session only runs while the computer is awake | Medium | Warn on end-of-day away mode; suggest an OS keep-awake option |
 | Several sessions away at once read the same chat | Medium | v1: one away session at a time (lock file). v2: route by project tag |
