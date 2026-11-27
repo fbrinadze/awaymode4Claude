@@ -2,6 +2,19 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.0.0] - 2026-11-27
+
+First stable release: the same code as 0.3.1, declared stable after live testing on Windows with Microsoft Teams.
+
+### Verified live
+- Install on Windows with `setup\install.ps1`, including a terminal that was open before Bun was installed.
+- Sign-in and pairing with the Away Mode chat in Teams.
+- Questions reach Teams while you're away.
+- Typing at the terminal ends away mode.
+
+### Not yet verified live
+- A Teams reply leaving away mode on, the "Done" note when a task finishes, and the `AskUserQuestion` → Teams redirect. Unit tests cover all three.
+
 ## [0.3.1] - 2026-11-27
 
 ### Fixed

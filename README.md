@@ -179,12 +179,13 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md). Please don't open a p
 ## Roadmap
 
 - [x] v0.1: Teams, two-way replies, permission relay
+- [x] v1.0: one-command Windows installer, live-tested on Teams
 - [ ] Several sessions away at once, routed by project
 - [ ] Listing in Anthropic's plugin directory
 
 ## Status
 
-Pre-release (v0.1.0, unreleased). See [CHANGELOG.md](CHANGELOG.md).
+v1.0.0, stable on Windows with Microsoft Teams. Claude Code channels are still a research preview, so you launch with `--dangerously-load-development-channels`. See [CHANGELOG.md](CHANGELOG.md).
 
 ## Contributing
 
