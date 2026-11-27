@@ -46,6 +46,10 @@ if (-not (Have bun)) {
   if ($bunExe) { $env:Path = "$($bunExe.DirectoryName);$env:Path" }
   if (-not (Have bun)) { throw "Bun didn't install. Install it from https://bun.sh, open a new window, and run this again." }
 }
+# Claude Code only sees the PATH it started with, and terminals opened before Bun was installed
+# keep the old one. Save Bun's real path (the .exe, never an npm .cmd shim) so the plugin can run it.
+$bunPath = (& bun -e "console.log(process.execPath)" | Out-String).Trim()
+if (-not $bunPath -or -not (Test-Path $bunPath)) { throw "Couldn't find where Bun is installed." }
 if (-not (Test-Native { az account show })) {
   & az login | Out-Null
   if ($LASTEXITCODE -ne 0) { throw "az login failed." }
@@ -101,7 +105,7 @@ try {
   Write-Host "Carrying on with the Claude Code part."
 }
 
-# 5. Claude Code plugin: install, then save the three values. The secret goes over stdin only,
+# 5. Claude Code plugin: install, then save the settings. The secret goes over stdin only,
 #    never on a command line, and Claude Code keeps it in your OS keychain.
 Step "Installing the Claude Code plugin"
 # On a re-run, refresh the marketplace and the plugin first: configure needs the current
@@ -116,14 +120,14 @@ if ($LASTEXITCODE -ne 0) { throw "Couldn't add or refresh the Away Mode marketpl
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to update it instead." }
 & claude plugin update $plugin
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
-@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret } |
+@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; bun_path = $bunPath } |
   ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }
 $app.Secret = $null
 Write-Host "Plugin installed and configured."
 
 Step "All set"
-Write-Host "1. Open a NEW terminal (so it picks up Bun) and start Claude Code with:"
+Write-Host "1. Start Claude Code with:"
 Write-Host "     $launch" -ForegroundColor Green
 Write-Host "2. Run /away-mode:setup: sign in with the code it shows, then reply hi to Away Mode in Teams."
 Write-Host "3. When you step away, just say so, for example: going to lunch, back at 1:30."

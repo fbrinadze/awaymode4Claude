@@ -26,7 +26,7 @@
   },
   "mcpServers": {
     "away": {
-      "command": "bun",
+      "command": "${user_config.bun_path}",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/server/index.ts"
       ],
@@ -91,6 +91,12 @@
       "title": "Terminal-only commands",
       "description": "Comma-separated command patterns that can only be approved at the terminal, never from Teams.",
       "default": "rm -rf,git push --force,deploy"
+    },
+    "bun_path": {
+      "type": "string",
+      "title": "Bun path",
+      "description": "Full path to bun (bun.exe on Windows). setup\\install.ps1 fills this in so Away Mode works even before your terminal picks up a new PATH. Leave as bun if it's on your PATH.",
+      "default": "bun"
     }
   }
 }

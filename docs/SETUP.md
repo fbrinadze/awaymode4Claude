@@ -44,7 +44,7 @@ If the Teams step fails, for example because you aren't a Teams admin, the insta
 
 ## Then: pair
 
-1. **Open a new terminal**, so it picks up Bun, and run `claude --dangerously-load-development-channels plugin:away-mode@awaymode`.
+1. Run `claude --dangerously-load-development-channels plugin:away-mode@awaymode`.
 2. Run `/away-mode:setup`. Sign in at the microsoft.com link with the code it shows.
 3. Reply **hi** to Away Mode in Teams. Claude confirms you're paired.
 
@@ -74,6 +74,12 @@ If the terminal closes after you sign in, start Claude Code again and say "I sig
 
 - **Teams deep links** for org apps use the catalog ID, not the bot ID: `https://teams.microsoft.com/l/app/<catalog id>`.
 - **Your tenant blocks device-code sign-in.** Browser sign-in isn't supported yet.
+
+## Troubleshooting
+
+- **Away Mode's server won't start, or hooks say `bun` isn't found.** Claude Code only sees the PATH it was started with. On Windows, terminal apps like Windows Terminal and VS Code keep the PATH they had when they opened, even in a new tab, so Bun installed afterwards is invisible to them. Either:
+  - set **Bun path** under `/plugin` → Away Mode to the full path of `bun.exe` (run `bun -e "console.log(process.execPath)"` in any window where `bun` works). The Windows installer does this for you, or
+  - fully quit your terminal app (every window) and open it again.
 
 ## Removing it
 
