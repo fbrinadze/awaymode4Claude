@@ -136,5 +136,6 @@ Write-Host "Plugin installed and configured."
 Step "All set"
 Write-Host "1. Start Claude Code with:"
 Write-Host "     $launch" -ForegroundColor Green
-Write-Host "2. Run /away-mode:setup: sign in with the code it shows, then reply hi to Away Mode in Teams."
+$replyTo = if ($Route -eq "workflow") { "the chat with Workflows in Teams" } else { "Away Mode in Teams" }
+Write-Host "2. Run /away-mode:setup: sign in with the code it shows, then reply hi in $replyTo."
 Write-Host "3. When you step away, just say so, for example: going to lunch, back at 1:30."
