@@ -1,14 +1,18 @@
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
 import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
 import { createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
+import { doctorTool } from "./doctor.ts";
 import type { Net } from "./http.ts";
 import { baseTag, projectKey } from "./project.ts";
 import { setProject } from "./state.ts";
 import { secretStore } from "./secrets.ts";
 import { setupTool } from "./setup.ts";
+
+const version = (JSON.parse(readFileSync(new URL("../.claude-plugin/plugin.json", import.meta.url), "utf8")) as { version: string }).version;
 
 const fail = async (): Promise<never> => {
   throw new Error("Away Mode isn't connected to Teams yet. Run /away-mode:setup.");
@@ -59,6 +63,7 @@ const away = createAway({
   adapter,
   extraTools: (ctx) => [
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
+    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current }),
   ],
   dir,
   key: projectKey(projectDir),
