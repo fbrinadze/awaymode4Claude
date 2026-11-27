@@ -74,3 +74,23 @@ test("a fresh lock is waited for, then reported", () => {
   expect(waited).toBeGreaterThanOrEqual(1_500);
   expect(waited).toBeLessThan(3_000);
 });
+
+const deadPid = async () => {
+  const p = Bun.spawn(["bun", "-e", "0"]);
+  await p.exited;
+  return p.pid;
+};
+
+test("a fresh lock whose holder is dead is broken at once", async () => {
+  const d = dir();
+  writeFileSync(join(d, "state.lock"), String(await deadPid()));
+  const start = Date.now();
+  expect(withStore(d, T, (s) => (s.me = "u"))).toBe("u");
+  expect(Date.now() - start).toBeLessThan(1_000);
+});
+
+test("a fresh lock whose holder is alive is still waited for", () => {
+  const d = dir();
+  writeFileSync(join(d, "state.lock"), String(process.pid));
+  expect(() => withStore(d, T, () => {})).toThrow(StateBusy);
+});

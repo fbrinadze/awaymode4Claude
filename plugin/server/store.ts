@@ -1,5 +1,5 @@
 // state.json v2: shared fields plus one entry per project, written only under state.lock.
-import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Action } from "./route.ts";
 import type { Permission, Question } from "./state.ts";
@@ -112,16 +112,28 @@ export function readStore(dir: string, _now: number, migrateTo?: { key: string; 
   return { version: 2, me: str(v.me), cursor: str(v.cursor), nextQ: num(v.nextQ, 1), lease, projects };
 }
 
+/** The lock file holds its owner's pid. True when that process is gone (EPERM means alive). */
+function holderDead(path: string): boolean {
+  const pid = Number.parseInt(readFileSync(path, "utf8"), 10);
+  if (!(pid > 0)) return false; // Empty or unreadable: fall back to the age rule.
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
 function lock(dir: string): string {
   const path = join(dir, "state.lock");
   const give = Date.now() + LOCK_WAIT_MS;
   for (;;) {
     try {
-      closeSync(openSync(path, "wx"));
+      writeFileSync(path, String(process.pid), { flag: "wx" });
       return path;
     } catch {
       try {
-        if (Date.now() - statSync(path).mtimeMs > LOCK_STALE_MS) rmSync(path, { force: true });
+        if (holderDead(path) || Date.now() - statSync(path).mtimeMs > LOCK_STALE_MS) rmSync(path, { force: true });
       } catch {
         // Gone between the open and the stat: retry at once.
       }
