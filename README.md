@@ -264,6 +264,15 @@ Start with `/away-mode:doctor`. It checks Bun, the plugin, your settings, sign-i
 - [x] v1.0: one-command Windows installer, live-tested on Teams
 - [x] v1.1: several sessions away at once, routed by project
 - [x] v1.1: preparation for a listing in Anthropic's plugin directory (the listing itself is a separate submission)
+- [x] v1.1: Teams commands `extend`, `until`, `snooze`, `more`, a recap when away mode ends, and `/away-mode:doctor`
+- [x] v1.2: no Teams admin needed (the workflow route: a Power Automate flow sends, your own app reads replies)
+- [x] v1.2: cards that say Claude Code and which project each message is from
+
+Next:
+
+- [ ] Listing in Anthropic's plugin directory (submit the prepared plugin)
+- [ ] Browser sign-in, for organisations that block device-code sign-in
+- [ ] One-command installer for macOS and Linux (setup there is manual today)
 
 ## Contributing
 
