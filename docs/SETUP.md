@@ -33,7 +33,7 @@ It:
 1. **Checks prerequisites:** the Azure CLI, Claude Code and Bun (installing Bun with winget if needed).
 2. **Creates or reuses the Azure side.** It runs `create-app.ps1` (below) and adds a fresh bot secret without ever showing it.
 3. **Puts Away Mode in Teams.** It signs you in to the Teams PowerShell module (installing it if needed) and publishes the app to your organization's apps, or updates it if it's already there. It then makes the app **available to** and **installs it for** you and anyone in `-ForUsers`. Installs can take a few minutes to show up.
-4. **Installs the plugin** with `claude plugin install away-mode@awaymode`, and saves the Tenant ID, Bot app ID and Bot secret with `claude plugin configure`. The secret goes to your OS keychain.
+4. **Installs the plugin** with `claude plugin install away-mode@awaymode`, and saves the Tenant ID, Bot app ID and Bot secret (plus the `sessions` and `reply_routing` settings, from `-Sessions several|one` and `-ReplyRouting on|off`) with `claude plugin configure`. The secret goes to your OS keychain.
 5. **Prints what to do next.**
 
 It's safe to re-run. Each run adds one new bot secret; older ones keep working until you delete them in Entra (**App registrations → away-mode → Certificates & secrets**).
