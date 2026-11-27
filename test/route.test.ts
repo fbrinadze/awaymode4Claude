@@ -73,6 +73,40 @@ test("back still ends away mode with a question open; #qN answers it literally",
   expect(route(msg("#q1 back"), s)).toEqual({ kind: "answer", questionId: "q1", text: "back" });
 });
 
+test("surrounding punctuation, whitespace and case still approve", () => {
+  const s = state({ permissions: [perm("abcde")] });
+  const ok = { kind: "verdict", id: "abcde", behavior: "allow" } as const;
+  for (const t of ["yes abcde.", " YES  abcde ", "yes abcde!", "(yes abcde)"]) expect(route(msg(t), s)).toEqual(ok);
+});
+
+test("a near-miss ID is never approved; it asks for confirmation", () => {
+  const s = state({ permissions: [perm("abcde")] });
+  for (const t of ["yes abcdf", "yes abcd", "yes abcdef", "yes bacde", "yes abcle"]) {
+    const a = route(msg(t), s);
+    expect(a.kind).toBe("confirm");
+    expect(a).toMatchObject({ id: "abcde", behavior: "allow" });
+  }
+  expect(route(msg("no abcdf"), s)).toMatchObject({ kind: "confirm", id: "abcde", behavior: "deny" });
+});
+
+test("a typo near two live IDs is not a confirm", () => {
+  const s = state({ permissions: [perm("abcde"), perm("abcdf")] });
+  expect(route(msg("yes abcdg"), s)).toEqual({ kind: "instruction", text: "yes abcdg" });
+});
+
+test("a far-off ID is not a confirm; exact match still approves", () => {
+  const s = state({ permissions: [perm("abcde")] });
+  expect(route(msg("yes zzzzz"), s).kind).toBe("instruction");
+  expect(route(msg("yes abcde"), s).kind).toBe("verdict");
+});
+
+test("bare yes/no with several pending asks which one", () => {
+  const s = state({ permissions: [perm("abcde"), perm("fghij")] });
+  const a = route(msg("yes"), s);
+  expect(a.kind).toBe("prompt");
+  expect(a).toMatchObject({ text: "Which one? Reply yes abcde or yes fghij" });
+});
+
 test("anything else with nothing open is a new instruction", () => {
   expect(route(msg("also update the README"), state())).toEqual({
     kind: "instruction",

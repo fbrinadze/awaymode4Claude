@@ -90,8 +90,8 @@ export function createAway(d: Deps) {
   async function act(a: Action): Promise<void> {
     if ((a.kind === "answer" || a.kind === "instruction") && looksLikeSecret(a.text)) return say(HELD_BACK_TEXT);
     switch (a.kind) {
-      case "drop":
-        return;
+      case "drop": return;
+      case "confirm": case "prompt": return say(a.text);
       case "verdict":
         update((s) => void (s.permissions = s.permissions.filter((p) => p.id !== a.id)));
         server.notify("notifications/claude/channel/permission", { request_id: a.id, behavior: a.behavior });
