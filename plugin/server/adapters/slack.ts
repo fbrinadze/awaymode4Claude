@@ -35,8 +35,8 @@ export function slackAdapter(
     if (typeof e.user !== "string" || typeof e.text !== "string" || typeof e.ts !== "string") return;
     const m: Msg = { id: e.ts, from: e.user, text: e.text, at: new Date(Number(e.ts) * 1000).toISOString() };
     if (e.user === cfg.me) buffer.push(m); // sender gate
-    // Pairing can't know the sender yet: it sees only bare 6-digit codes, never other text. Capped.
-    else if (/^\s*\d{6}\s*$/.test(e.text)) pairing = [...pairing.slice(-19), m];
+    // Pairing (or re-pairing) can't trust the sender yet: it sees only bare 6-digit codes, from anyone. Capped.
+    if (/^\s*\d{6}\s*$/.test(e.text)) pairing = [...pairing.slice(-19), m];
   }
 
   const socket = socketClient({

@@ -25,3 +25,13 @@ test("pairing sees only code-shaped DMs, never other text, and respects since", 
   expect((await slack.pairDms(EPOCH)).map((m) => m.text)).toEqual(["654321"]);
   slack.stop();
 });
+
+test("re-pairing works: a paired user's (or a new user's) code DM reaches pairing", async () => {
+  const { slack, sock } = slackHarness({ botToken: "xoxb-test", appToken: "xapp-test", me: "U1" });
+  await slack.start();
+  const s = sock.sockets[0]!;
+  s.receive(dm("e1", "1788000000.1", "123456", {}, "U1"));
+  s.receive(dm("e2", "1788000001.1", "654321", {}, "U2"));
+  expect((await slack.pairDms(EPOCH)).map((m) => [m.from, m.text])).toEqual([["U1", "123456"], ["U2", "654321"]]);
+  slack.stop();
+});

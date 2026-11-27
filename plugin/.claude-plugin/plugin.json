@@ -23,7 +23,8 @@
       "graph.microsoft.com",
       "smba.trafficmanager.net",
       "slack.com",
-      "wss-primary.slack.com"
+      "wss-primary.slack.com",
+      "wss-backup.slack.com"
     ]
   },
   "mcpServers": {

@@ -20,6 +20,8 @@ interface Opts {
 }
 
 const OPEN_URL = "https://slack.com/api/apps.connections.open";
+/** Slack errors that retrying can't fix: wrong, revoked or under-scoped token. */
+const PERMANENT = new Set(["invalid_auth", "not_authed", "account_inactive", "token_revoked", "missing_scope"]);
 
 /** Socket Mode connection: opens, acks every envelope, dedupes, reconnects with backoff. */
 export function socketClient(o: Opts) {
@@ -37,9 +39,28 @@ export function socketClient(o: Opts) {
       method: "POST",
       headers: { authorization: `Bearer ${o.appToken}`, "content-type": "application/x-www-form-urlencoded" },
     });
-    if (res.ok !== true) throw new Error(`Slack apps.connections.open failed: ${String(res.error)}`);
+    if (res.ok !== true) {
+      const err = new Error(`Slack apps.connections.open failed: ${String(res.error)}`);
+      throw PERMANENT.has(String(res.error)) ? Object.assign(err, { permanent: true }) : err;
+    }
     if (stopped) return;
     attach(o.openSocket(String(res.url)));
+  }
+
+  /** One attempt. True when done: connected, or a permanent error that ends retrying (and is surfaced). */
+  async function attempt(): Promise<boolean> {
+    try {
+      await open();
+      return true;
+    } catch (e) {
+      if (!(e as { permanent?: boolean }).permanent) {
+        console.error("away-mode: Slack connection failed:", (e as Error).message);
+        return false;
+      }
+      stopped = true;
+      o.onFatal(e as Error);
+      return true;
+    }
   }
 
   function attach(sock: WebSocketLike): void {
@@ -85,17 +106,15 @@ export function socketClient(o: Opts) {
     while (!stopped) {
       await o.net.sleep(delay);
       delay = Math.min(delay * 2, 60_000);
-      if (stopped) return;
-      try {
-        return await open();
-      } catch (e) {
-        console.error("away-mode: Slack reconnect failed:", (e as Error).message);
-      }
+      if (stopped || (await attempt())) return;
     }
   }
 
   return {
-    start: open,
+    /** Never rejects: a failed first connection retries with the same backoff as a reconnect. */
+    async start(): Promise<void> {
+      if (!(await attempt())) void reconnect();
+    },
     stop(): void {
       stopped = true;
       ws?.close();
