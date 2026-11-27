@@ -51,7 +51,7 @@ export function makeTools(c: Ctx): Tool[] {
       let id = "";
       c.update((s) => {
         id = `q${s.nextQ++}`;
-        s.questions.push({ id, text: question, options });
+        s.questions.push({ id, text: question, options, askedAt: c.deps.now() });
       });
       const how = options.length
         ? `Reply ${options.map((o, i) => `${i + 1} = ${o}`).join(", ")}, or type an answer.`

@@ -3,6 +3,10 @@
 export const SENSITIVE_TEXT =
   "Sensitive request\nClaude needs information that can't be shared over Teams.\nPlease go back to your Claude Code session to continue.";
 
+/** Sent instead of passing a secret-looking reply to Claude. */
+export const HELD_BACK_TEXT =
+  "That looked like a password or key, so it wasn't passed on to Claude. Enter it in Claude Code instead, and consider rotating it.";
+
 const REQUEST = /\b(send|give|enter|paste|share|provide|type|tell me|what'?s|what is)\b/i;
 const SECRET_NOUN =
   /\b(password|passcode|passphrase|pin|api key|access key|token|secret|private key|connection string|one[- ]time code|otp|mfa code|2fa code|verification code|card number|credit card|cvv)\b/i;

@@ -5,6 +5,8 @@ export interface Question {
   id: string;
   text: string;
   options: string[];
+  /** Epoch ms the question was sent; drives the end-of-day timeout. */
+  askedAt?: number;
 }
 
 export interface Permission {
