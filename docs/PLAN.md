@@ -284,10 +284,10 @@ Each phase ends with a check that must pass before the next starts.
 
 ### Phase 4: Harden and release v0.1.0
 
-- [ ] Reply edge cases: verdict typos, replies after you're back, replies when nothing is open
-- [ ] `docs/SETUP.md` (admin + user), `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`
-- [ ] CI on Windows, macOS, Linux: validate `--strict`, typecheck, tests; signed tags; issue templates
-- [ ] Plugin icon (512–2048 px square PNG) for a future directory listing
+- [x] Reply edge cases: verdict typos, replies after you're back, replies when nothing is open
+- [x] `docs/SETUP.md` (admin + user), `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, `LICENSE`
+- [x] CI on Windows, macOS, Linux: validate `--strict`, typecheck, tests; issue templates (signed tags: not yet)
+- [x] Plugin icon (512–2048 px square PNG) for a future directory listing
 - [ ] Tag v0.1.0
 
 **Check:** someone in a different Microsoft tenant installs it from the docs alone in under 15 minutes.
