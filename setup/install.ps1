@@ -8,6 +8,9 @@
   For a team (as a Teams admin), add the people who should get it:
     powershell -ExecutionPolicy Bypass -File setup\install.ps1 -ForUsers alice@contoso.com,bob@contoso.com
 
+  Optional: -Sessions one (going away in a project hands over from the previous one; default
+  several) and -ReplyRouting on (quoting a bot message in Teams routes to its project; default off).
+
   Safe to re-run. Needs the Azure CLI and Claude Code; installs Bun and the MicrosoftTeams
   PowerShell module if missing. The bot secret is never shown: it goes straight into Claude
   Code's settings (your OS keychain). Works in Windows PowerShell 5.1 and PowerShell 7.
@@ -16,7 +19,9 @@ param(
   [string[]]$ForUsers = @(),
   [string]$Name = "away-mode",
   [string]$ResourceGroup = "away-mode-rg",
-  [string]$Location = "eastus"
+  [string]$Location = "eastus",
+  [ValidateSet("several", "one")][string]$Sessions = "several",
+  [ValidateSet("on", "off")][string]$ReplyRouting = "off"
 )
 $ErrorActionPreference = "Stop"
 $plugin = "away-mode@awaymode"
@@ -120,7 +125,7 @@ if ($LASTEXITCODE -ne 0) { throw "Couldn't add or refresh the Away Mode marketpl
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin install reported a problem; trying to update it instead." }
 & claude plugin update $plugin
 if ($LASTEXITCODE -ne 0) { Write-Warning "claude plugin update reported a problem; trying to save the settings anyway." }
-@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; bun_path = $bunPath } |
+@{ tenant_id = $app.TenantId; bot_app_id = $app.AppId; bot_secret = $app.Secret; bun_path = $bunPath; sessions = $Sessions; reply_routing = $ReplyRouting } |
   ConvertTo-Json -Compress | & claude plugin configure $plugin --values-stdin
 if ($LASTEXITCODE -ne 0) { throw "Couldn't save Away Mode's settings in Claude Code." }
 $app.Secret = $null

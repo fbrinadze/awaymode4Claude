@@ -41,7 +41,9 @@
         "AWAY_HOURS": "${user_config.away_hours}",
         "AWAY_WAIT_MINUTES": "${user_config.wait_minutes}",
         "AWAY_END_OF_DAY_ACTION": "${user_config.end_of_day_action}",
-        "AWAY_NEVER_RELAY": "${user_config.never_relay}"
+        "AWAY_NEVER_RELAY": "${user_config.never_relay}",
+        "AWAY_SESSIONS": "${user_config.sessions}",
+        "AWAY_REPLY_ROUTING": "${user_config.reply_routing}"
       }
     }
   },
@@ -95,6 +97,18 @@
       "title": "Terminal-only commands",
       "description": "Comma-separated command patterns that can only be approved at the terminal, never from Teams.",
       "default": "rm -rf,git push --force,deploy"
+    },
+    "sessions": {
+      "type": "string",
+      "title": "Sessions away at once",
+      "description": "several = each project can be away at once; one = going away in a project hands over from the previous one.",
+      "default": "several"
+    },
+    "reply_routing": {
+      "type": "string",
+      "title": "Reply-to-message routing",
+      "description": "on = quoting a bot message in Teams sends your reply to that message's project. off = use @project.",
+      "default": "off"
     },
     "bun_path": {
       "type": "string",

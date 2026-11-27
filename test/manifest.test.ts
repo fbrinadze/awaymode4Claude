@@ -31,3 +31,11 @@ test("listing metadata: https urls, icon, plugin README and LICENSE, size limits
   expect(files.length).toBeLessThanOrEqual(512);
   for (const f of files) expect(statSync(join(f.parentPath, f.name)).size).toBeLessThanOrEqual(256 * 1024);
 });
+
+test("sessions and reply_routing settings default safely and reach the server as env vars", () => {
+  const plugin = read(".claude-plugin/plugin.json");
+  expect(plugin.userConfig.sessions).toMatchObject({ type: "string", default: "several" });
+  expect(plugin.userConfig.reply_routing).toMatchObject({ type: "string", default: "off" });
+  expect(plugin.mcpServers.away.env.AWAY_SESSIONS).toBe("${user_config.sessions}");
+  expect(plugin.mcpServers.away.env.AWAY_REPLY_ROUTING).toBe("${user_config.reply_routing}");
+});

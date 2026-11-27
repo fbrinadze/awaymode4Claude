@@ -72,6 +72,8 @@ const away = createAway({
   waitMinutes: num(process.env.AWAY_WAIT_MINUTES, 60),
   neverRelay: list(process.env.AWAY_NEVER_RELAY, ["rm -rf", "git push --force", "deploy"]),
   endOfDay: setting(process.env.AWAY_END_OF_DAY_ACTION).toLowerCase() === "safest" ? "safest" : "park",
+  sessions: setting(process.env.AWAY_SESSIONS).toLowerCase() === "one" ? "one" : "several",
+  replyRouting: setting(process.env.AWAY_REPLY_ROUTING).toLowerCase() === "on",
   now: Date.now,
   sleep: net.sleep,
   write: (line) => void process.stdout.write(line),
