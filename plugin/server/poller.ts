@@ -15,6 +15,8 @@ export interface PollerDeps {
   deliverLocal(r: Routed): Promise<void>;
   /** Post a message labelled with a project's tag. */
   announce(tag: string, text: string): Promise<void>;
+  /** Route replies to a quoted project message (Task 14 wires the setting). */
+  replyRouting?: boolean;
 }
 
 /** The cursor to poll from if this project is away and holds the lease, else null. */
@@ -41,7 +43,7 @@ function routeOne(d: PollerDeps, m: Msg): Routed {
   const t = d.now();
   return withStore(d.dir, t, (s) => {
     s.cursor = m.at;
-    const r = dispatch(m, s, t);
+    const r = dispatch(m, s, t, d.replyRouting ?? false);
     for (const k of r.targets) if (k !== d.key) s.projects[k]?.inbox.push({ action: r.action, at: m.at });
     return r;
   });

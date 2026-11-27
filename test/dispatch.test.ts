@@ -89,3 +89,17 @@ test("more <id> targets the project holding that request; unknown id prompts", (
   expect(dispatch(msg("more kpqrs"), s, NOW)).toEqual({ targets: [B], action: { kind: "more", id: "kpqrs" } });
   expect(dispatch(msg("more zzzzz"), s, NOW)).toEqual({ targets: [], action: { kind: "prompt", text: "No request zzzzz is waiting." } });
 });
+
+test("replyTag routes plain text to that away project only when replyRouting is on", () => {
+  const m = { ...msg("go ahead"), replyTag: "b" };
+  expect(dispatch(m, store(), NOW, true)).toEqual({ targets: [B], action: { kind: "instruction", text: "go ahead" } });
+  const off = dispatch(m, store(), NOW, false);
+  expect(off.targets).toEqual([]);
+  expect(off.action).toMatchObject({ kind: "prompt", text: expect.stringContaining("Which project?") });
+});
+
+test("replyTag: explicit @tag wins; unknown or not-away tag falls through", () => {
+  expect(dispatch({ ...msg("@a hi"), replyTag: "b" }, store(), NOW, true).targets).toEqual([A]);
+  expect(dispatch({ ...msg("hi"), replyTag: "zzz" }, store(), NOW, true).action).toMatchObject({ kind: "prompt" });
+  expect(dispatch({ ...msg("hi"), replyTag: "b" }, store(A), NOW, true).action).toMatchObject({ kind: "instruction" });
+});

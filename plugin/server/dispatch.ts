@@ -52,7 +52,7 @@ function plain(text: string, s: Store, away: string[]): Routed {
   return prompt(`Which project? Start with ${away.map((k) => `@${tagFor(k, s)}`).join(" or ")}.`);
 }
 
-export function dispatch(msg: Msg, s: Store, now: number): Routed {
+export function dispatch(msg: Msg, s: Store, now: number, replyRouting = false): Routed {
   // The whole security model: only the paired account gets through.
   if (!s.me || msg.from !== s.me) return { targets: [], action: { kind: "drop" } };
   const text = msg.text.trim();
@@ -72,5 +72,8 @@ export function dispatch(msg: Msg, s: Store, now: number): Routed {
   }
   if (cmd) return { targets: away, action: cmd };
   if (away.length === 1) return { targets: away, action: routeProject(text, all, sentAt) };
+  // Rule 6: a reply quoting a project's message goes to that project, like an @tag.
+  const rk = replyRouting && msg.replyTag ? away.find((k) => tagFor(k, s).toLowerCase() === msg.replyTag!.toLowerCase()) : undefined;
+  if (rk) return tagged(msg.replyTag!, text, s, away, sentAt);
   return plain(text, s, away);
 }

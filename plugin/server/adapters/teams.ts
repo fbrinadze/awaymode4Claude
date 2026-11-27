@@ -57,8 +57,23 @@ interface GraphMsg {
   lastModifiedDateTime: string;
   lastEditedDateTime?: string | null;
   deletedDateTime?: string | null;
-  from?: { user?: { id?: string } | null } | null;
+  from?: { user?: { id?: string } | null; application?: { id?: string } | null } | null;
   body?: { content?: string };
+  attachments?: { contentType?: string; content?: string | null }[];
+}
+
+const BOT_TAG = /^\[Claude(?: · ([^\]]+))?\]/;
+const MAX_BOT = 200;
+
+/** The quoted message's ID when this reply quotes one. */
+function quotedId(m: GraphMsg): string | undefined {
+  const a = m.attachments?.find((x) => x.contentType === "messageReference");
+  if (!a?.content) return undefined;
+  try {
+    return JSON.parse(a.content).messageId;
+  } catch {
+    return undefined; // unparseable reference: treat as a plain reply
+  }
 }
 
 /** A fresh reply from a person: not the bot, not a system event, not an edit or deletion. */
@@ -66,6 +81,16 @@ const isReply = (m: GraphMsg): boolean =>
   m.messageType === "message" && !!m.from?.user?.id && !m.deletedDateTime && !m.lastEditedDateTime;
 
 export function teamsAdapter(dir: string, cfg: TeamsConfig, auth: Auth, net: Net): Adapter {
+  // Bot message ID -> project tag, learned from the bot's own messages in poll pages. Newest 200 (Map keeps insertion order).
+  const botTags = new Map<string, string>();
+  const learn = (m: GraphMsg) => {
+    const tag = BOT_TAG.exec(htmlToText(m.body?.content ?? ""))?.[1]?.trim();
+    if (!tag) return;
+    botTags.delete(m.id);
+    botTags.set(m.id, tag);
+    if (botTags.size > MAX_BOT) botTags.delete(botTags.keys().next().value!);
+  };
+
   async function conversation(): Promise<string> {
     if (cfg.conversationId) return cfg.conversationId;
     const body = {
@@ -94,12 +119,16 @@ export function teamsAdapter(dir: string, cfg: TeamsConfig, auth: Auth, net: Net
       if (since) q.set("$filter", `lastModifiedDateTime gt ${since}`);
       const r = await call(net, `${GRAPH}/chats/${encodeURIComponent(cfg.chatId)}/messages?${q}`, bearer(await auth.graphToken()));
       const page = ((r.value ?? []) as GraphMsg[]).slice().reverse();
-      return page.filter(isReply).map(
-        (m): Msg => ({
+      for (const m of page) if (m.from?.application) learn(m);
+      return page.filter(isReply).map((m): Msg => {
+        const msg: Msg = {
           id: m.id, from: m.from!.user!.id!, text: htmlToText(m.body?.content ?? ""),
           at: m.lastModifiedDateTime, sentAt: m.createdDateTime,
-        }),
-      );
+        };
+        const id = quotedId(m);
+        const replyTag = id ? botTags.get(id) : undefined;
+        return replyTag ? { ...msg, replyTag } : msg;
+      });
     },
 
     async me() {

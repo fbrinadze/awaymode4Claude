@@ -8,6 +8,8 @@ export interface Msg {
   at: string;
   /** ISO time the user actually sent it (Graph createdDateTime), when known; `at` may be a later edit time. */
   sentAt?: string;
+  /** Project tag of the bot message this reply quotes, when known (Teams reply-to-message). */
+  replyTag?: string;
 }
 
 /** One messaging platform. Another must fit by adding a file, not changing this. */
