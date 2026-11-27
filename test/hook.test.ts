@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { decide } from "../plugin/hooks/hook.ts";
 
 const now = Date.parse("2026-11-26T18:00:00Z");
@@ -68,11 +68,11 @@ test("the session that turned away mode on is recorded as its owner", () => {
     away(),
     now,
   );
-  expect(r).toEqual({ patch: { awaySession: "A" } });
+  expect(r).toEqual({ patch: { sessionId: "A" } });
 });
 
 test("only this plugin's own set_away can claim ownership", () => {
-  const owned = { ...away(), awaySession: "A" };
+  const owned = { ...away(), sessionId: "A" };
   const post = (tool_name: string) => ({ hook_event_name: "PostToolUse", session_id: "B", tool_name, tool_input: { on: true } });
   expect(decide(post("mcp__other__set_away"), owned, now)).toEqual({});
   expect(decide(post("mcp__plugin_evil_away__set_away"), owned, now)).toEqual({});
@@ -80,7 +80,7 @@ test("only this plugin's own set_away can claim ownership", () => {
 });
 
 test("other sessions are left alone while one is away", () => {
-  const owned = { ...away(), awaySession: "A", lastStopAt: now - 300_000 };
+  const owned = { ...away(), sessionId: "A", lastStopAt: now - 300_000 };
   expect(decide({ ...ask, session_id: "B" }, owned, now)).toEqual({});
   expect(decide({ ...stop(), session_id: "B" }, owned, now)).toEqual({});
   expect(decide({ hook_event_name: "UserPromptSubmit", session_id: "B", prompt: "hi" }, owned, now)).toEqual({});
@@ -92,7 +92,7 @@ test("other sessions are left alone while one is away", () => {
 
 test("the hook script adds little to Bun's own startup when away mode is off", async () => {
   const dir = mkdtempSync(join(tmpdir(), "away-hook-"));
-  writeFileSync(join(dir, "state.json"), JSON.stringify({ awayUntil: 0 }));
+  writeFileSync(join(dir, "state.json"), JSON.stringify({ version: 2, projects: { x: { awayUntil: 0 } } }));
   const run = async (args: string[]) => {
     const start = performance.now();
     const p = Bun.spawn(["bun", ...args], { env: { ...process.env, CLAUDE_PLUGIN_DATA: dir }, stdin: new Blob([JSON.stringify(ask)]), stdout: "pipe" });
@@ -106,4 +106,47 @@ test("the hook script adds little to Bun's own startup when away mode is off", a
   console.log(`bun startup ${bare.toFixed(0)} ms, hook (away off) ${hook.toFixed(0)} ms, overhead ${(hook - bare).toFixed(0)} ms`);
   expect(hookRuns[0]!.out).toBe("");
   expect(hook - bare).toBeLessThan(50);
+});
+
+test("set_away claims the session for its project", () => {
+  const input = { hook_event_name: "PostToolUse", session_id: "S", tool_name: "mcp__plugin_away-mode_away__set_away", tool_input: { on: true } };
+  expect(decide(input, away(), now)).toEqual({ patch: { sessionId: "S" } });
+});
+
+const runHook = async (dir: string, projectDir: string, input: object) => {
+  const p = Bun.spawn(["bun", "plugin/hooks/hook.ts"], {
+    env: { ...process.env, CLAUDE_PLUGIN_DATA: dir, CLAUDE_PROJECT_DIR: projectDir },
+    stdin: new Blob([JSON.stringify(input)]),
+    stdout: "pipe",
+  });
+  await p.exited;
+};
+const seed = (projects: Record<string, object>) => {
+  const dir = mkdtempSync(join(tmpdir(), "away-hook-"));
+  writeFileSync(join(dir, "state.json"), JSON.stringify({ version: 2, projects }));
+  return dir;
+};
+const key = (p: string) => (process.platform === "win32" ? resolve(p).toLowerCase() : resolve(p));
+
+test("terminal input ends away for its own project only", async () => {
+  const [a, b] = [key("/a"), key("/b")];
+  const until = Date.now() + 3_600_000;
+  const dir = seed({ [a]: { ...away(), awayUntil: until }, [b]: { ...away(), awayUntil: until } });
+  await runHook(dir, "/a", { hook_event_name: "UserPromptSubmit", prompt: "I'm back" });
+  const s = JSON.parse(readFileSync(join(dir, "state.json"), "utf8"));
+  expect(s.projects[a].awayUntil).toBe(0);
+  expect(s.projects[b].awayUntil).toBe(until);
+});
+
+test("the hook write keeps mode 0600 and takes the lock", async () => {
+  const a = key("/a");
+  const dir = seed({ [a]: { ...away(), awayUntil: Date.now() + 3_600_000 } });
+  const lockFile = join(dir, "state.lock");
+  writeFileSync(lockFile, "");
+  const old = new Date(Date.now() - 60_000);
+  utimesSync(lockFile, old, old); // stale: the hook must break it
+  await runHook(dir, "/a", { hook_event_name: "UserPromptSubmit", prompt: "hi" });
+  expect(JSON.parse(readFileSync(join(dir, "state.json"), "utf8")).projects[a].awayUntil).toBe(0);
+  expect(existsSync(lockFile)).toBe(false);
+  if (process.platform !== "win32") expect(statSync(join(dir, "state.json")).mode & 0o777).toBe(0o600);
 });
