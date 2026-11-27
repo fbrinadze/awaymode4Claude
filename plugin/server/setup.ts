@@ -65,7 +65,11 @@ export function setupTool(d: SetupDeps): Tool {
     const token = await auth.graphToken();
     const me = String((await call(d.net, `${GRAPH}/me?$select=id`, bearer(token))).id);
     const apps = await call(d.net, `${GRAPH}/users/${me}/teamwork/installedApps?$expand=teamsApp`, bearer(token));
-    const app = ((apps.value ?? []) as Json[]).find((a) => (a.teamsApp as Json | undefined)?.externalId === d.botId);
+    // Org-catalog apps carry the manifest ID in externalId; uploaded (sideloaded) apps carry it in id.
+    const app = ((apps.value ?? []) as Json[]).find((a) => {
+      const t = a.teamsApp as Json | undefined;
+      return t?.externalId === d.botId || t?.id === d.botId;
+    });
     if (!app) throw new Error(NOT_ADDED);
     const chat = await call(d.net, `${GRAPH}/users/${me}/teamwork/installedApps/${app.id}/chat`, bearer(token));
 
