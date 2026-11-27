@@ -127,3 +127,10 @@ test("an edited old yes can't approve a newer request", () => {
   };
   expect(dispatch(msg, s, T + 10_000).action.kind).toBe("prompt");
 });
+
+test("endAway zeroes the snooze", () => {
+  const p = busy();
+  p.snoozeUntil = T + MIN;
+  endAway(p, "back");
+  expect(p.snoozeUntil).toBe(0);
+});

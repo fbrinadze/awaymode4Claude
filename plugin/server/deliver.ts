@@ -62,6 +62,21 @@ async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Pr
   return e.say(`Away until ${new Date(until).toString()} for ${tag}.`);
 }
 
+/** `snooze 30m` / `snooze until 3pm` / `unsnooze`: finished and info notes wait for the recap. */
+async function snooze(e: DeliverEnv, a: Extract<Action, { kind: "snooze" | "unsnooze" }>): Promise<void> {
+  const tag = withStore(e.dir, e.now(), (s) => tagFor(e.key, s));
+  const now = e.now();
+  if (!isAway(e.current(), now)) return e.say(`Away mode already ended for ${tag}.`);
+  if (a.kind === "unsnooze") {
+    e.update((s) => void (s.snoozeUntil = 0));
+    return e.say(`Snooze off for ${tag}.`);
+  }
+  const until = "minutes" in a ? now + a.minutes * 60_000 : resolveUntil({ at: a.at }, now, e.hours);
+  if (!(until > now)) return e.say("Couldn't read that time. Try \"snooze 30m\" or \"snooze until 3pm\".");
+  e.update((s) => void (s.snoozeUntil = until));
+  return e.say(`Snoozed until ${new Date(until).toString()} for ${tag}. Questions, approvals and errors still come through.`);
+}
+
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
   function verdict(a: Extract<Action, { kind: "verdict" }>): Promise<void> {
     const perm = e.current().permissions.find((p) => p.id === a.id);
@@ -84,7 +99,7 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
       case "status": return e.say(statusText(e.current(), e.now()));
       case "extend": return extend(e, a);
       case "more": return more(e, a.id);
-      case "snooze": case "unsnooze": return e.say("Coming soon."); // delivery lands in a later task
+      case "snooze": case "unsnooze": return snooze(e, a);
       case "back":
         e.channel("The user ended away mode from Teams.", { kind: "back" });
         return e.say(e.end("back"));

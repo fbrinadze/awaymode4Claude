@@ -6,9 +6,11 @@ import { createAway } from "../plugin/server/away.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { SENSITIVE_TEXT } from "../plugin/server/sensitive.ts";
 import { fresh, load, save } from "../plugin/server/state.ts";
+import { readStore } from "../plugin/server/store.ts";
 import { FakeAdapter } from "./fake-adapter.ts";
 
 const T = Date.parse("2026-11-26T18:00:00Z");
+let clock = T;
 let fake: FakeAdapter, dir: string, out: Json[], away: ReturnType<typeof createAway>, seq: number;
 
 beforeEach(() => {
@@ -17,13 +19,14 @@ beforeEach(() => {
   fake = new FakeAdapter("user-1");
   out = [];
   seq = 0;
+  clock = T;
   away = createAway({
     adapter: fake,
     dir,
     project: "order-portal",
     hours: 9,
     waitMinutes: 60,
-    now: () => T,
+    now: () => clock,
     sleep: () => new Promise(() => {}), // poll loop runs once; tests drive pollOnce
     write: (l) => void out.push(JSON.parse(l)),
   });
@@ -155,7 +158,7 @@ test("an unusable time says what time it is now", async () => {
 test("a session with no project just says Claude", async () => {
   const lines: Json[] = [];
   const home = createAway({
-    adapter: fake, dir, project: "", hours: 9, waitMinutes: 60, now: () => T,
+    adapter: fake, dir, project: "", hours: 9, waitMinutes: 60, now: () => clock,
     sleep: () => new Promise(() => {}), write: (l) => void lines.push(JSON.parse(l)),
   });
   const call = (name: string, args: Json) =>
@@ -222,4 +225,68 @@ test("a secret request hidden in ask options or notify text gets the fixed text 
   await tool("ask", { question: "Which environment?", options: ["staging", "send me your API key"] });
   expect(fake.sent).toEqual([`[Claude · order-portal] ${SENSITIVE_TEXT}`, `[Claude · order-portal] ${SENSITIVE_TEXT}`]);
   expect(load(dir).questions).toEqual([]);
+});
+
+// Snooze (spec 6.3, 6.4): finished/info are held for the recap; everything else still comes through.
+const recap = () => Object.values(readStore(dir, clock).projects)[0]?.recap ?? [];
+const snoozeUntil = () => Object.values(readStore(dir, clock).projects)[0]?.snoozeUntil ?? 0;
+
+test("snooze holds finished and info for the recap; error, sensitive and ask still go out", async () => {
+  await tool("set_away", { on: true });
+  await reply("snooze 30m");
+  expect(snoozeUntil()).toBe(T + 30 * 60_000);
+  expect(fake.sent.at(-1)).toMatch(/^\[Claude · order-portal\] Snoozed until .* for .*\. Questions, approvals and errors still come through\.$/);
+  const before = fake.sent.length;
+  expect(JSON.stringify(await tool("notify", { type: "finished", text: "Report done" }))).toContain("recap");
+  await tool("notify", { type: "info", text: "FYI" });
+  expect(fake.sent).toHaveLength(before);
+  expect(recap()).toEqual([{ kind: "finished", text: "Report done" }, { kind: "info", text: "FYI" }]);
+  expect(load(dir).lastSentAt).toBe(T);
+  await tool("notify", { type: "error", text: "Build broke" });
+  await tool("notify", { type: "sensitive", text: "x" });
+  await tool("ask", { question: "Proceed?" });
+  expect(fake.sent.slice(before).map((s) => s.split("\n")[0])).toEqual(["[Claude · order-portal] Error", "[Claude · order-portal] Sensitive request", "[Claude · order-portal] Question q1"]);
+});
+
+test("snooze holds hook-queued finished/info but still sends hook-queued errors", async () => {
+  await tool("set_away", { on: true });
+  await reply("snooze 30m");
+  const before = fake.sent.length;
+  save(dir, { ...load(dir), outbox: [{ type: "finished", text: "Hook done" }, { type: "error", text: "Claude stopped: 429" }] });
+  await away.pollOnce();
+  expect(fake.sent.slice(before)).toEqual(["[Claude · order-portal] Error\nClaude stopped: 429"]);
+  expect(recap()).toEqual([{ kind: "finished", text: "Hook done" }]);
+  expect(load(dir).outbox).toEqual([]);
+});
+
+test("unsnooze clears it; a snooze ends at its time", async () => {
+  await tool("set_away", { on: true });
+  await reply("snooze 30m");
+  await reply("unsnooze");
+  expect(snoozeUntil()).toBe(0);
+  expect(fake.sent.at(-1)).toMatch(/Snooze off for /);
+  await tool("notify", { type: "finished", text: "Sent now" });
+  expect(fake.sent.at(-1)).toBe("[Claude · order-portal] Done\nSent now");
+  await reply("snooze 10m");
+  clock = T + 11 * 60_000;
+  await tool("notify", { type: "finished", text: "After snooze" });
+  expect(fake.sent.at(-1)).toBe("[Claude · order-portal] Done\nAfter snooze");
+  expect(recap()).toEqual([]);
+});
+
+test("snooze until a clock time", async () => {
+  await tool("set_away", { on: true });
+  await reply("snooze until 11:59pm");
+  expect(snoozeUntil()).toBeGreaterThan(T);
+  expect(snoozeUntil()).toBeLessThanOrEqual(T + 24 * 3_600_000);
+});
+
+test("ending away lists held notes under Finished and clears the snooze", async () => {
+  await tool("set_away", { on: true });
+  await reply("snooze 30m");
+  await tool("notify", { type: "finished", text: "Report done" });
+  await reply("back");
+  expect(fake.sent.at(-1)).toContain("Finished:\n- Report done");
+  expect(snoozeUntil()).toBe(0);
+  expect(recap()).toEqual([]);
 });

@@ -88,6 +88,11 @@ export function makeTools(c: Ctx): Tool[] {
       else if (Object.hasOwn(HEADERS, type)) {
         const body = text(a.text, "text");
         if (await refuse([body])) return NOT_SENT;
+        if (type !== "error" && c.current().snoozeUntil > c.deps.now()) {
+          c.update((s) => void s.recap.push({ kind: type as "finished" | "info", text: body }));
+          sent();
+          return "Held for the user's recap: they snoozed Teams. Questions, approvals and errors still go through.";
+        }
         await c.say(`${HEADERS[type]}\n${body}`);
       } else throw new Error("type must be finished, error, info or sensitive.");
       sent();

@@ -15,7 +15,7 @@ export function endAway(p: ProjectState, reason: EndReason): string {
     ...bullets("Unanswered", p.questions.map((q) => `${q.id}: ${q.text}`)),
     ...bullets("Parked", texts(p, "parked")),
   ].join("\n");
-  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], ownerInstance: undefined, sessionId: undefined, awayUntil: 0 });
+  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], ownerInstance: undefined, sessionId: undefined, awayUntil: 0, snoozeUntil: 0 });
   return text;
 }
 

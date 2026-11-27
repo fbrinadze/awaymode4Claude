@@ -1,4 +1,4 @@
-import { freshProject, readStore, withStore } from "./store.ts";
+import { freshProject, readStore, type RecapItem, withStore } from "./store.ts";
 
 export interface Question {
   id: string;
@@ -42,6 +42,9 @@ export interface State {
   awaySession?: string;
   /** Messages queued by hooks (which can't send) for the server to deliver on its next poll. */
   outbox: { type: string; text: string }[];
+  /** Epoch ms until which finished/info notes are held for the recap; 0 = not snoozed. */
+  snoozeUntil: number;
+  recap: RecapItem[];
 }
 
 export const fresh = (): State => ({
@@ -55,6 +58,8 @@ export const fresh = (): State => ({
   lastStopAt: 0,
   awayStartedAt: 0,
   outbox: [],
+  snoozeUntil: 0,
+  recap: [],
 });
 
 export const isAway = (s: State, now: number): boolean => s.awayUntil > now;
@@ -77,6 +82,7 @@ export function load(dir: string, key = mine.key): State {
     awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
     permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
     awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
+    snoozeUntil: p.snoozeUntil, recap: p.recap,
   };
 }
 
@@ -89,7 +95,7 @@ export function save(dir: string, v: State, key = mine.key): void {
     s.projects[key] = {
       ...p, tag: p.tag || me.tag, awayUntil: v.awayUntil, questions: v.questions, permissions: v.permissions,
       lastSentAt: v.lastSentAt, lastStopAt: v.lastStopAt, awayStartedAt: v.awayStartedAt,
-      sessionId: v.awaySession, outbox: v.outbox,
+      sessionId: v.awaySession, outbox: v.outbox, snoozeUntil: v.snoozeUntil, recap: v.recap,
     };
   }, me);
 }

@@ -82,6 +82,11 @@ export function createRelay(r: RelayDeps) {
     r.update((s) => {
       items = s.outbox;
       s.outbox = [];
+      if (s.snoozeUntil > r.now()) { // snoozed: finished/info wait for the recap, errors still go out
+        const held = items.filter((m) => m.type === "finished" || m.type === "info");
+        for (const m of held) s.recap.push({ kind: m.type as "finished" | "info", text: m.text });
+        items = items.filter((m) => !held.includes(m));
+      }
     });
     for (let i = 0; i < items.length; i++) {
       const m = items[i]!;
