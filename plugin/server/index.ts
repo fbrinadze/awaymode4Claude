@@ -2,7 +2,8 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline";
 import type { Adapter } from "./adapters/adapter.ts";
-import { loadTeams, teamsAdapter } from "./adapters/teams.ts";
+import { loadTeams, teamsAdapter, type TeamsConfig } from "./adapters/teams.ts";
+import { installRef, workflowAdapter, type WorkflowConfig } from "./adapters/workflow.ts";
 import { type AuthConfig, BOT_SCOPES, createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import { doctorTool } from "./doctor.ts";
@@ -56,10 +57,16 @@ const authCfg: AuthConfig | null =
 const auth = authCfg ? createAuth(authCfg, net, secretStore(dir), Date.now) : null;
 
 // Swappable so a successful setup switches to Teams without a restart.
-const saved = loadTeams(dir);
-let current: Adapter = routeCfg.route === "bot" && auth && saved ? teamsAdapter(dir, saved, auth, net) : notSetUp; // workflow adapter wired in Task 7
+const saved = loadTeams(dir) as TeamsConfig | WorkflowConfig | null;
+const wf = routeCfg.route === "workflow" && routeCfg.workflowUrl ? { url: routeCfg.workflowUrl, ref: installRef(dir) } : undefined;
+function adapterFor(cfg: TeamsConfig | WorkflowConfig | null): Adapter {
+  if (!auth || !cfg) return notSetUp;
+  if ("route" in cfg) return wf ? workflowAdapter(cfg, wf.url, wf.ref, () => auth.graphToken(), net) : notSetUp;
+  return routeCfg.route === "bot" ? teamsAdapter(dir!, cfg, auth, net) : notSetUp;
+}
+let current: Adapter = adapterFor(saved);
 const adapter: Adapter = {
-  send: (text) => current.send(text),
+  send: (text, meta) => current.send(text, meta),
   poll: (since) => current.poll(since),
   me: () => current.me(),
 };
@@ -67,7 +74,7 @@ const adapter: Adapter = {
 const away = createAway({
   adapter,
   extraTools: (ctx) => [
-    setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a) }),
+    setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a), workflow: wf }),
     doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current }),
   ],
   dir,

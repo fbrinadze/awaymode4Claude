@@ -6,6 +6,8 @@ import type { Auth, DeviceCode } from "./auth.ts";
 import { bearer, call, type Json, type Net } from "./http.ts";
 import type { Tool } from "./mcp.ts";
 import type { Ctx } from "./tools.ts";
+import { workflowAdapter } from "./adapters/workflow.ts";
+import { consentHelp, pairWorkflow, scopeWarning } from "./setup-workflow.ts";
 
 export interface SetupDeps {
   ctx: Ctx;
@@ -18,6 +20,8 @@ export interface SetupDeps {
   /** The adapter in use now, and a way to switch to Teams once paired. */
   current(): Adapter;
   use(adapter: Adapter): void;
+  /** Set on the workflow route: pairing goes through the flow instead of the bot. */
+  workflow?: { url: string; ref: string };
 }
 
 const GRAPH = "https://graph.microsoft.com/v1.0";
@@ -56,12 +60,28 @@ export function setupTool(d: SetupDeps): Tool {
     return `Show the user this exactly: ${pending.message}\nWhen they say they've signed in, call setup with step "finish".`;
   }
 
-  /** Signs in (if a code is pending, here or saved by an earlier session), finds the bot chat, switches to Teams and sends a test message. */
-  async function finish(auth: Auth): Promise<string> {
-    const saved = takePending(d.dir, d.ctx.deps.now());
-    const dc = pending ?? saved;
+  /** Completes a pending sign-in, here or saved by an earlier session. A consent refusal is explained. */
+  async function signIn(auth: Auth): Promise<void> {
+    const dc = pending ?? takePending(d.dir, d.ctx.deps.now());
     pending = null;
-    if (dc) await auth.finishDeviceCode(dc);
+    if (dc) await auth.finishDeviceCode(dc).catch((e) => { throw consentHelp(e) ?? e; });
+  }
+
+  /** Workflow route: warn about a broad sign-in first, then pair through the flow and switch to it. */
+  async function finishWorkflow(auth: Auth, w: { url: string; ref: string }, accept: boolean): Promise<string> {
+    await signIn(auth);
+    const warning = accept ? undefined : await scopeWarning(auth);
+    if (warning) return `Show the user this exactly: ${warning}\nOnly if they still want to continue, call setup with step "finish" and accept_scopes true.`;
+    const cfg = await pairWorkflow({ dir: d.dir, net: d.net, auth, url: w.url, ref: w.ref, tenantId: d.tenantId, sleep: d.net.sleep });
+    d.use(workflowAdapter(cfg, w.url, w.ref, () => auth.graphToken(), d.net));
+    const now = d.ctx.deps.now();
+    d.ctx.update((s) => void Object.assign(s, { me: cfg.me, cursor: new Date(now).toISOString() }));
+    return 'Pairing card sent in Teams (it comes from "Workflows"). Ask the user to reply "hi" in that chat, then call setup with step "verify".';
+  }
+
+  /** Signs in, finds the bot chat, switches to Teams and sends a test message. */
+  async function finish(auth: Auth): Promise<string> {
+    await signIn(auth);
     const token = await auth.graphToken();
     const me = String((await call(d.net, `${GRAPH}/me?$select=id`, bearer(token))).id);
     const apps = await call(d.net, `${GRAPH}/users/${me}/teamwork/installedApps?$expand=teamsApp`, bearer(token));
@@ -104,13 +124,16 @@ export function setupTool(d: SetupDeps): Tool {
       'Connect Away Mode to Microsoft Teams, in order: "start" (returns a sign-in code to show the user), "finish" (after they sign in: finds the bot chat and sends a test message), "verify" (after they reply hi).',
     inputSchema: {
       type: "object",
-      properties: { step: { type: "string", enum: ["start", "finish", "verify"] } },
+      properties: {
+        step: { type: "string", enum: ["start", "finish", "verify"] },
+        accept_scopes: { type: "boolean", description: "Workflow route only: the user read the sign-in warning and wants to continue." },
+      },
       required: ["step"],
     },
     async run(a) {
       if (!d.auth) throw new Error(NOT_CONFIGURED);
       if (a.step === "start") return start(d.auth);
-      if (a.step === "finish") return finish(d.auth);
+      if (a.step === "finish") return d.workflow ? finishWorkflow(d.auth, d.workflow, a.accept_scopes === true) : finish(d.auth);
       if (a.step === "verify") return verify();
       throw new Error('step must be "start", "finish" or "verify".');
     },
