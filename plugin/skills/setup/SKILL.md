@@ -18,6 +18,7 @@ Walk the user through connecting this Claude Code session to Teams, using the Aw
 
 ## Steps
 
+0. If the user says they already signed in (for example in a session that has since closed), call `setup` with `step: "finish"` first. Away Mode keeps the pending code for about 15 minutes. If `finish` says sign-in expired, continue with step 1.
 1. Call `setup` with `step: "start"`. Show the user the sign-in instruction it returns, exactly as given (a microsoft.com link and a code). Ask them to tell you when they've signed in.
 2. When they say they're done, call `setup` with `step: "finish"`.
    - If it says the app isn't added in Teams, relay those instructions (upload `away-mode-teams.zip` in Teams, or add it from their organization's apps), wait for them, then call `finish` again. They don't need to sign in again.

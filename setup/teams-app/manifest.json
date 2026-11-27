@@ -1,7 +1,7 @@
 {
   "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.19/MicrosoftTeams.schema.json",
   "manifestVersion": "1.19",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "id": "{{BOT_ID}}",
   "developer": {
     "name": "Away Mode for Claude Code",
@@ -21,7 +21,7 @@
     "color": "color.png",
     "outline": "outline.png"
   },
-  "accentColor": "#4F6BED",
+  "accentColor": "#D97757",
   "bots": [
     {
       "botId": "{{BOT_ID}}",

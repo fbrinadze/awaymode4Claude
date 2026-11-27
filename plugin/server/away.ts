@@ -52,7 +52,7 @@ export function createAway(d: Deps) {
 
   const away = () => isAway(current(), d.now());
   const say = (text: string) => {
-    const full = `[${d.project}] ${text}`;
+    const full = `[${d.project ? `Claude · ${d.project}` : "Claude"}] ${text}`;
     return d.adapter.send(full.length > CAP ? `${full.slice(0, CAP - 1)}…` : full);
   };
 

@@ -56,10 +56,10 @@ test("question: ask, reply with an option number, answer reaches Claude", async 
   await tool("set_away", { on: true });
   const r = await tool("ask", { question: "Include archived orders?", options: ["yes", "no"] });
   expect(JSON.stringify(r)).toContain("q1");
-  expect(fake.sent[0]).toBe("[order-portal] Question q1\nInclude archived orders?\nReply 1 = yes, 2 = no, or type an answer.");
+  expect(fake.sent[0]).toBe("[Claude · order-portal] Question q1\nInclude archived orders?\nReply 1 = yes, 2 = no, or type an answer.");
   await reply("2");
   expect(channel()).toEqual([{ content: "2 (no)", meta: { kind: "answer", question_id: "q1" } }]);
-  expect(fake.sent.at(-1)).toBe("[order-portal] Got it.");
+  expect(fake.sent.at(-1)).toBe("[Claude · order-portal] Got it.");
   expect(load(dir).questions).toEqual([]);
 });
 
@@ -93,7 +93,7 @@ test("finished and error notes carry the project name", async () => {
   await tool("set_away", { on: true });
   await tool("notify", { type: "finished", text: "Exported 3 reports." });
   await tool("notify", { type: "error", text: "Tests fail on Windows." });
-  expect(fake.sent).toEqual(["[order-portal] Done\nExported 3 reports.", "[order-portal] Error\nTests fail on Windows."]);
+  expect(fake.sent).toEqual(["[Claude · order-portal] Done\nExported 3 reports.", "[Claude · order-portal] Error\nTests fail on Windows."]);
   expect((await tool("notify", { type: "toString", text: "x" })).isError).toBe(true);
 });
 
@@ -116,4 +116,50 @@ test("set_away rejects a past end time and defaults to away_hours", async () => 
   await tool("set_away", { on: true });
   expect(load(dir).awayUntil).toBe(T + 9 * 3_600_000);
   expect(load(dir).cursor).toBe(new Date(T).toISOString());
+});
+
+test("set_away tells Claude when to call it", async () => {
+  await away.handle(JSON.stringify({ jsonrpc: "2.0", id: 999, method: "tools/list" }));
+  const tools = (out.find((m) => m.id === 999)!.result as { tools: { name: string; description: string }[] }).tools;
+  const description = tools.find((t) => t.name === "set_away")!.description;
+  expect(description).toMatch(/stepping away/);
+  expect(description).toMatch(/lunch/);
+  expect(description).toMatch(/back/);
+});
+
+test("set_away minutes counts from the server's clock", async () => {
+  await tool("set_away", { on: true, minutes: 30 });
+  expect(load(dir).awayUntil).toBe(T + 30 * 60_000);
+});
+
+test("set_away at resolves a local clock time to its next occurrence", async () => {
+  const next = (h: number, m: number) => {
+    const d = new Date(T);
+    d.setHours(h, m, 0, 0);
+    if (d.getTime() <= T) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  };
+  await tool("set_away", { on: true, at: "13:30" });
+  expect(load(dir).awayUntil).toBe(next(13, 30));
+  await tool("set_away", { on: true, at: "5:15 pm" });
+  expect(load(dir).awayUntil).toBe(next(17, 15));
+});
+
+test("an unusable time says what time it is now", async () => {
+  const r = await tool("set_away", { on: true, at: "25:99" });
+  expect(r.isError).toBe(true);
+  expect(JSON.stringify(r)).toContain("It is now");
+});
+
+test("a session with no project just says Claude", async () => {
+  const lines: Json[] = [];
+  const home = createAway({
+    adapter: fake, dir, project: "", hours: 9, waitMinutes: 60, now: () => T,
+    sleep: () => new Promise(() => {}), write: (l) => void lines.push(JSON.parse(l)),
+  });
+  const call = (name: string, args: Json) =>
+    home.handle(JSON.stringify({ jsonrpc: "2.0", id: ++seq, method: "tools/call", params: { name, arguments: args } }));
+  await call("set_away", { on: true });
+  await call("notify", { type: "info", text: "hi" });
+  expect(fake.sent).toEqual(["[Claude] Update\nhi"]);
 });

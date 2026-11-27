@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Adapter } from "../plugin/server/adapters/adapter.ts";
@@ -7,6 +7,7 @@ import { loadTeams } from "../plugin/server/adapters/teams.ts";
 import type { Auth } from "../plugin/server/auth.ts";
 import { createAway } from "../plugin/server/away.ts";
 import type { Json } from "../plugin/server/mcp.ts";
+import { SignedOut } from "../plugin/server/auth.ts";
 import { load } from "../plugin/server/state.ts";
 import { setupTool } from "../plugin/server/setup.ts";
 import { fakeNet } from "./fake-net.ts";
@@ -14,8 +15,8 @@ import { fakeNet } from "./fake-net.ts";
 const T = Date.parse("2026-11-26T18:00:00Z");
 const GRAPH = "https://graph.microsoft.com/v1.0";
 
-function harness(auth: Auth | null, installed: Json[], replies: Json[] = []) {
-  const dir = mkdtempSync(join(tmpdir(), "away-setup-"));
+/** Pass the same `dir` to a second harness to simulate restarting Claude Code. */
+function harness(auth: Auth | null, installed: Json[], replies: Json[] = [], dir = mkdtempSync(join(tmpdir(), "away-setup-"))) {
   const sent: Json[] = [];
   const { net } = fakeNet([
     [`GET ${GRAPH}/me`, () => ({ id: "user-1" })],
@@ -89,4 +90,36 @@ test("verify waits for your reply, ignores anyone else's", async () => {
   await paired.setup("finish");
   expect((await paired.setup("verify")).text).toContain("Paired");
   expect(paired.sent.at(-1)?.text).toContain("Paired");
+});
+
+test("finish after a restart uses the saved sign-in code", async () => {
+  const a = harness(fakeAuth, [ourApp]);
+  await a.setup("start");
+  const used: string[] = [];
+  const restarted = { ...fakeAuth, finishDeviceCode: async (dc: { deviceCode: string }) => void used.push(dc.deviceCode) } as Auth;
+  const b = harness(restarted, [ourApp], [], a.dir);
+  const r = await b.setup("finish");
+  expect(r.isError).toBe(false);
+  expect(used).toEqual(["dc"]);
+  expect(existsSync(join(a.dir, "device.json"))).toBe(false);
+});
+
+const signedOut = { ...fakeAuth, graphToken: async () => Promise.reject(new SignedOut()) } as Auth;
+
+test("an expired saved code is ignored and removed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "away-setup-"));
+  writeFileSync(join(dir, "device.json"), JSON.stringify({ deviceCode: "old", message: "m", interval: 5, expiresAt: T - 1 }));
+  const r = await harness(signedOut, [ourApp], [], dir).setup("finish");
+  expect(r.isError).toBe(true);
+  expect(r.text).toContain("/away-mode:setup");
+  expect(existsSync(join(dir, "device.json"))).toBe(false);
+});
+
+test("a corrupt saved code is treated as none", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "away-setup-"));
+  writeFileSync(join(dir, "device.json"), "{oops");
+  const r = await harness(signedOut, [ourApp], [], dir).setup("finish");
+  expect(r.isError).toBe(true);
+  expect(r.text).toContain("/away-mode:setup");
+  expect(existsSync(join(dir, "device.json"))).toBe(false);
 });

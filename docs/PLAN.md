@@ -47,7 +47,7 @@ Messages come from the Away Mode bot, not from you, so they buzz your phone and 
 
 ```text
 Away Mode                                        1:12 PM
-[order-portal] Question
+[Claude · order-portal] Question
 Should the export include archived orders?
 Reply 1 = yes, 2 = no, or type an answer.
 
@@ -55,10 +55,10 @@ Reply 1 = yes, 2 = no, or type an answer.
                                                        2
 
 Away Mode                                        1:20 PM
-[order-portal] Got it, excluding archived orders.
+[Claude · order-portal] Got it, excluding archived orders.
 
 Away Mode                                        1:34 PM
-[order-portal] Permission needed
+[Claude · order-portal] Permission needed
 Bash: npm run migrate
 Reply "yes kfmpq" or "no kfmpq".
 
@@ -145,7 +145,7 @@ A Teams Workflows webhook would avoid the admin step, but it can only send, neve
 
 ### Message rules
 
-- Every message starts with the project name, like `[order-portal]`.
+- Every message starts with `[Claude · <project>]`, or just `[Claude]` when Claude Code was started in the home folder.
 - Plain text, capped at about 1,200 characters.
 - One open question at a time per session; `#<id> answer` targets an older one.
 - Replies are matched in order: permission verdict, then open question, then new instruction. Nothing but an exact verdict counts as an approval.
@@ -172,7 +172,7 @@ If Claude needs a password, key or other credential, the bot sends only:
 
 ```text
 Away Mode                                        2:05 PM
-[order-portal] Sensitive request
+[Claude · order-portal] Sensitive request
 Claude needs information that can't be shared over Teams.
 Please go back to your Claude Code session to continue.
 ```
@@ -267,13 +267,15 @@ Each phase ends with a check that must pass before the next starts.
 - [x] `adapters/teams.ts` and `auth.ts` (plus `http.ts`, and `secrets.ts` using `Bun.secrets` with a 0600-file fallback)
 - [x] `setup/create-app` scripts and Teams app manifest template
 - [x] `setup` skill: sign-in, find the bot chat, store the chat ID, test message, pair on "hi"
-- [ ] Live check below (needs a real tenant). It also answers Phase 0's open question about the unreachable bot endpoint
+- [x] Live check, passed 26 Nov 2026: pairing, then from a phone a question, a permission (`yes <id>`), a finished note and `back`. It also answered Phase 0's open question: replies reach Claude with no bot endpoint
+- [x] Setup made one command: `setup/install.ps1` (Azure app and bot, Teams publish/availability/install, plugin install and configure), re-runnable `create-app`, and pairing that survives a closed session
 
 **Check:** a real round trip from a phone works for a question, a permission and a finished task.
 
 ### Phase 3: Away experience and hooks
 
-- [ ] `away`, `back`, `status` skills
+- [x] `away`, `back` skills (brought forward: plain "going away" didn't turn away mode on in the live check)
+- [ ] `status` skill
 - [ ] `hook.ts`: question redirect, finished summary, API-error alert, auto-back
 - [ ] End-of-day policy, `never_relay`, sensitive-request guard (both directions)
 
@@ -302,7 +304,8 @@ Each phase ends with a check that must pass before the next starts.
 | --- | --- | --- |
 | Channels are a [research preview](https://code.claude.com/docs/en/channels#research-preview). Custom channels need `--dangerously-load-development-channels` unless on Anthropic's allowlist or the org's `allowedChannelPlugins` | High | Document both paths. Admins add `away-mode` to `allowedChannelPlugins`. Apply for an Anthropic directory listing after v0.1. Keep channel code in one file |
 | Team/Enterprise orgs block channels until an Owner enables them; not on Bedrock, Vertex or Foundry | Medium | State requirements up front. The setup skill checks and stops with a clear message |
-| Unverified: what Teams shows when the bot endpoint is unreachable | High | Phase 0. Plan B: an opt-in relay function (~40 lines) that stores replies for the plugin to collect |
+| ~~Unverified: what Teams shows when the bot endpoint is unreachable~~ | Resolved | Live check, 26 Nov 2026: replies post to the chat and reach Claude through Graph with a placeholder endpoint. Plan B not needed |
+| Tenants block custom app upload, and the admin center's availability page can fail | Medium | `install.ps1` publishes with the Teams PowerShell module and sets availability and installs with `Update-M365TeamsApp`; docs/SETUP.md "Tenant notes" covers doing it by hand |
 | The session only runs while the computer is awake | Medium | Warn on end-of-day away mode; suggest an OS keep-awake option |
 | Several sessions away at once read the same chat | Medium | v1: one away session at a time (lock file). v2: route by project tag |
 | Some tenants block device-code sign-in | Medium | Fall back to browser sign-in with PKCE and a localhost redirect |
