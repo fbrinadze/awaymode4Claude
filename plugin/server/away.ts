@@ -70,7 +70,7 @@ export function createAway(d: Deps) {
   const say = (text: string) => announce(d.project, text);
   const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions };
   const end = (reason: EndReason) => endProject(life, reason);
-  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, deliverLocal: (r: Routed) => act(r.action), announce });
+  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, waitMinutes: d.waitMinutes, deliverLocal: (r: Routed) => act(r.action), announce });
 
   function startPolling(): void {
     if (polling) return;

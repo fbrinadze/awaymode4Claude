@@ -80,8 +80,8 @@ async function snooze(e: DeliverEnv, a: Extract<Action, { kind: "snooze" | "unsn
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
   function verdict(a: Extract<Action, { kind: "verdict" }>): Promise<void> {
     const perm = e.current().permissions.find((p) => p.id === a.id);
-    if (perm?.instance !== undefined && perm.instance !== e.instance) return e.say("That request is no longer waiting.");
-    if (perm?.needsMore && !perm.moreSent) return e.say(`Read it first: more ${a.id}`);
+    if (!perm || (perm.instance !== undefined && perm.instance !== e.instance)) return e.say("That request is no longer waiting.");
+    if (perm.needsMore && !perm.moreSent) return e.say(`Read it first: more ${a.id}`);
     e.update((s) => void (s.permissions = s.permissions.filter((p) => p.id !== a.id)));
     e.notify("notifications/claude/channel/permission", { request_id: a.id, behavior: a.behavior });
     return e.say(a.behavior === "allow" ? "Approved." : "Denied.");

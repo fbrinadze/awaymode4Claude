@@ -3,6 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAway } from "../plugin/server/away.ts";
+import { makeAct } from "../plugin/server/deliver.ts";
+import { fresh } from "../plugin/server/state.ts";
 import { LEASE_MS } from "../plugin/server/lease.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { withStore } from "../plugin/server/store.ts";
@@ -117,4 +119,42 @@ test("the inbox drains on its own 5 s timer while the Graph poll is backed off",
   tick.go();
   await new Promise((r) => setTimeout(r, 20));
   expect(i1.channel()).toEqual(["now"]);
+});
+
+const expiredPermission = (h: ReturnType<typeof pair>, extra = {}) =>
+  withStore(h.dir, h.clock.t, (s) => void s.projects[KEY]!.permissions.push({ id: "abcde", tool: "Bash", at: h.clock.t, instance: "I1", needsMore: true, ...extra }));
+
+test("an id older than wait_minutes is not approved by yes <id>", async () => {
+  const h = pair();
+  const i1 = h.mk("I1");
+  await i1.call("set_away", { on: true });
+  expiredPermission(h);
+  h.clock.t += 61 * 60_000;
+  i1.fake.reply("yes abcde", h.clock.t);
+  await i1.away.pollOnce();
+  expect(i1.verdicts()).toEqual([]);
+});
+
+test("a bare yes with one expired permission is not approved", async () => {
+  const h = pair();
+  const i1 = h.mk("I1");
+  await i1.call("set_away", { on: true });
+  expiredPermission(h, { needsMore: false });
+  h.clock.t += 61 * 60_000;
+  i1.fake.reply("yes", h.clock.t);
+  await i1.away.pollOnce();
+  expect(i1.verdicts()).toEqual([]);
+});
+
+test("a verdict for an id that is no longer pending says so and notifies nothing", async () => {
+  const said: string[] = [];
+  const notes: string[] = [];
+  const act = makeAct({
+    dir: "", key: KEY, instance: "I1", now: () => T, hours: 9, current: () => ({ ...fresh(), permissions: [] }),
+    update: () => fresh(), say: async (t) => void said.push(t), notify: (m) => void notes.push(m),
+    channel: () => {}, answer: async () => {}, end: () => "",
+  });
+  await act({ kind: "verdict", id: "abcde", behavior: "allow" });
+  expect(notes).toEqual([]);
+  expect(said).toEqual(["That request is no longer waiting."]);
 });

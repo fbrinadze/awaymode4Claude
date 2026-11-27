@@ -5,7 +5,7 @@ import { releaseLease, takeLease } from "./lease.ts";
 import { tagFor } from "./project.ts";
 import { endAway } from "./recap.ts";
 import type { Action } from "./route.ts";
-import { withStore } from "./store.ts";
+import { type Store, withStore } from "./store.ts";
 
 export interface PollerDeps {
   dir: string;
@@ -17,6 +17,17 @@ export interface PollerDeps {
   announce(tag: string, text: string): Promise<void>;
   /** Route replies to a quoted project message (Task 14 wires the setting). */
   replyRouting?: boolean;
+  /** Permissions older than this many minutes no longer route as verdicts. */
+  waitMinutes?: number;
+}
+
+/** A copy of the store without permissions past the wait_minutes cutoff, for dispatch only. */
+function live(s: Store, d: PollerDeps, now: number): Store {
+  if (d.waitMinutes === undefined) return s;
+  const cutoff = now - d.waitMinutes * 60_000;
+  const projects = Object.fromEntries(Object.entries(s.projects).map(([k, p]) =>
+    [k, { ...p, permissions: p.permissions.filter((x) => x.at > cutoff) }]));
+  return { ...s, projects };
 }
 
 /** The cursor to poll from if this project is away and holds the lease, else null. */
@@ -43,7 +54,7 @@ function routeOne(d: PollerDeps, m: Msg): Routed {
   const t = d.now();
   return withStore(d.dir, t, (s) => {
     s.cursor = m.at;
-    const r = dispatch(m, s, t, d.replyRouting ?? false);
+    const r = dispatch(m, live(s, d, t), t, d.replyRouting ?? false);
     for (const k of r.targets) if (k !== d.key) s.projects[k]?.inbox.push({ action: r.action, at: m.at });
     return r;
   });
