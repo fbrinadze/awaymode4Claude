@@ -5,9 +5,11 @@ description: Turn on Away Mode so Claude's questions, permission requests and fi
 
 # Turn Away Mode on
 
-1. Work out when they'll be back from their words, against the current local time: "back at 1:30" means the next 1:30, "for 30 minutes" means now plus 30 minutes, "until 5pm" means today at 5 PM (tomorrow if that's passed). With no time given, leave `until` out and the default applies.
-2. Call the Away Mode `set_away` tool with `on: true` and, if you worked one out, `until` as an ISO 8601 time with the offset.
-3. Confirm in one line, in their local time: "Away mode on until 1:30 PM. I'll message you on Teams."
+1. Call the Away Mode `set_away` tool with `on: true` and how long they'll be gone, exactly as they said it. Don't work out the date or time yourself: you don't know the current time, but the server does.
+   - "for 30 minutes", "an hour", "/away-mode:away 1h": `minutes` (30, 60).
+   - "back at 1:30", "until 5pm": `at` ("1:30", "5pm"). The server picks the next time the clock shows it.
+   - Nothing said: leave them out, and the default length applies.
+2. Confirm in one line using the end time the tool returns: "Away mode on until 1:30 PM. I'll message you on Teams."
 
 ## While away mode is on
 

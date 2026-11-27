@@ -127,6 +127,30 @@ test("set_away tells Claude when to call it", async () => {
   expect(description).toMatch(/back/);
 });
 
+test("set_away minutes counts from the server's clock", async () => {
+  await tool("set_away", { on: true, minutes: 30 });
+  expect(load(dir).awayUntil).toBe(T + 30 * 60_000);
+});
+
+test("set_away at resolves a local clock time to its next occurrence", async () => {
+  const next = (h: number, m: number) => {
+    const d = new Date(T);
+    d.setHours(h, m, 0, 0);
+    if (d.getTime() <= T) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  };
+  await tool("set_away", { on: true, at: "13:30" });
+  expect(load(dir).awayUntil).toBe(next(13, 30));
+  await tool("set_away", { on: true, at: "5:15 pm" });
+  expect(load(dir).awayUntil).toBe(next(17, 15));
+});
+
+test("an unusable time says what time it is now", async () => {
+  const r = await tool("set_away", { on: true, at: "25:99" });
+  expect(r.isError).toBe(true);
+  expect(JSON.stringify(r)).toContain("It is now");
+});
+
 test("a session with no project just says Claude", async () => {
   const lines: Json[] = [];
   const home = createAway({

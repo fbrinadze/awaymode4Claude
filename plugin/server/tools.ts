@@ -22,6 +22,32 @@ function requireAway(c: Ctx): void {
 
 const obj = (properties: Json, required: string[]): Json => ({ type: "object", properties, required });
 
+const CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
+
+/**
+ * End time in epoch ms, from the server's own clock and timezone. Claude knows the date but not
+ * the time, so "for 30 minutes" and "back at 1:30" are resolved here. NaN means unusable.
+ */
+export function resolveUntil(a: Json, now: number, hours: number): number {
+  if (typeof a.minutes === "number") return a.minutes > 0 ? now + a.minutes * 60_000 : NaN;
+  if (typeof a.at === "string") {
+    const m = CLOCK.exec(a.at.trim());
+    if (!m) return NaN;
+    let h = Number(m[1]);
+    const min = Number(m[2] ?? 0);
+    const ampm = m[3]?.toLowerCase();
+    if (ampm) h = (h % 12) + (ampm === "pm" ? 12 : 0);
+    if (h > 23 || min > 59) return NaN;
+    const d = new Date(now);
+    d.setHours(h, min, 0, 0);
+    // The next time the clock shows it: "back at 1:30" said at 2 PM means tomorrow.
+    if (d.getTime() <= now) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  }
+  if (a.until !== undefined) return Date.parse(String(a.until));
+  return now + hours * 3_600_000;
+}
+
 export function makeTools(c: Ctx): Tool[] {
   const ask: Tool = {
     name: "ask",
@@ -65,23 +91,28 @@ export function makeTools(c: Ctx): Tool[] {
   const setAway: Tool = {
     name: "set_away",
     description:
-      'Turn Away Mode on or off. Call it with on=true when the user says they\'re stepping away, going to lunch, in a meeting, heading home or done for the day; pass until as an ISO time worked out from their words ("back at 1:30", "for 30 minutes") or leave it out for the default. Call it with on=false when they say they\'re back.',
-    inputSchema: obj({ on: { type: "boolean" }, until: { type: "string" } }, ["on"]),
+      'Turn Away Mode on or off. Call it with on=true when the user says they\'re stepping away, going to lunch, in a meeting, heading home or done for the day. Say how long with ONE of: minutes ("for 30 minutes" = 30), at as the local clock time they gave ("back at 1:30" = "1:30", "until 5pm" = "5pm"), or until as an exact ISO time. The server uses its own clock, so don\'t work out the date yourself. Leave all three out for the default length. Call it with on=false when they say they\'re back.',
+    inputSchema: obj(
+      { on: { type: "boolean" }, minutes: { type: "number" }, at: { type: "string" }, until: { type: "string" } },
+      ["on"],
+    ),
     async run(a) {
       const now = c.deps.now();
       if (a.on !== true) {
         c.update((s) => void (s.awayUntil = 0));
         return "Away mode off.";
       }
-      const until = a.until === undefined ? now + c.deps.hours * 3_600_000 : Date.parse(String(a.until));
-      if (!(until > now)) throw new Error("until must be a future ISO time.");
+      const until = resolveUntil(a, now, c.deps.hours);
+      if (!(until > now)) {
+        throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
+      }
       c.update((s) => {
         // Replies typed before going away aren't for us; extending keeps the cursor.
         if (!isAway(s, now)) s.cursor = new Date(now).toISOString();
         s.awayUntil = until;
       });
       c.startPolling();
-      return `Away mode on until ${new Date(until).toISOString()}. Tell the user you'll message them on Teams.`;
+      return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },
   };
 
