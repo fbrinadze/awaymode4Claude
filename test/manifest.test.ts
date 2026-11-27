@@ -3,13 +3,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const read = (p: string) => JSON.parse(readFileSync(new URL(`../plugin/${p}`, import.meta.url), "utf8"));
-const BUN = "${user_config.bun_path}";
+const BUN = "bun";
 
-// A bare "bun" fails when Claude Code started before Bun reached PATH (common on Windows).
-test("server and every hook run bun through the bun_path setting", () => {
+// install.ps1 links bun.exe into WindowsApps (always on PATH), so a bare "bun" resolves.
+test("server and every hook run plain bun, with no bun_path setting", () => {
   const plugin = read(".claude-plugin/plugin.json");
   expect(plugin.mcpServers.away.command).toBe(BUN);
-  expect(plugin.userConfig.bun_path.default).toBe("bun");
+  expect(plugin.userConfig.bun_path).toBeUndefined();
 
   const commands = Object.values(read("hooks/hooks.json").hooks as Record<string, { hooks: { command: string }[] }[]>)
     .flat()

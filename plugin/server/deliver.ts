@@ -51,12 +51,31 @@ export function drainOwned(dir: string, key: string, instance: string, now: numb
   });
 }
 
+const HOUR12 = 12 * 3_600_000;
+
+/**
+ * A clock time for `until`, which must still be ahead today: null when it isn't (a wrap to
+ * tomorrow would keep away mode on overnight). A bare "6" is read as 6am or 6pm, whichever
+ * comes first within 12 hours. NaN when unreadable.
+ */
+function untilToday(at: string, now: number, hours: number): number | null {
+  const first = resolveUntil({ at }, now, hours);
+  if (!(first > now)) return first;
+  const bare = /^(\d{1,2})(?::\d{2})?$/.exec(at.trim());
+  const h = Number(bare?.[1]);
+  const options = bare && h >= 1 && h <= 12 ? [first - HOUR12, first, first + HOUR12] : [first];
+  const until = Math.min(...options.filter((t) => t > now));
+  const today = new Date(until).toDateString() === new Date(now).toDateString();
+  return today && (!bare || until - now <= HOUR12) ? until : null;
+}
+
 /** `extend 30m` / `until 6pm`: moves this project's end. Not away any more: nothing changes. */
 async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Promise<void> {
   const tag = withStore(e.dir, e.now(), (s) => tagFor(e.key, s));
   const now = e.now();
   if (!isAway(e.current(), now)) return e.say(`Away mode already ended for ${tag}.`);
-  const until = "minutes" in a ? e.current().awayUntil + a.minutes * 60_000 : resolveUntil({ at: a.at }, now, e.hours);
+  const until = "minutes" in a ? e.current().awayUntil + a.minutes * 60_000 : untilToday(a.at, now, e.hours);
+  if (until === null) return e.say(`${(a as { at: string }).at} has already passed today. Try extend 30m or until a later time.`);
   if (!(until > now)) return e.say("Couldn't read that time. Try \"extend 30m\" or \"until 6pm\".");
   e.update((s) => void (s.awayUntil = until));
   return e.say(`Away until ${new Date(until).toString()} for ${tag}.`);
@@ -80,8 +99,8 @@ async function snooze(e: DeliverEnv, a: Extract<Action, { kind: "snooze" | "unsn
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
   function verdict(a: Extract<Action, { kind: "verdict" }>): Promise<void> {
     const perm = e.current().permissions.find((p) => p.id === a.id);
-    if (perm?.instance !== undefined && perm.instance !== e.instance) return e.say("That request is no longer waiting.");
-    if (perm?.needsMore && !perm.moreSent) return e.say(`Read it first: more ${a.id}`);
+    if (!perm || (perm.instance !== undefined && perm.instance !== e.instance)) return e.say("That request is no longer waiting.");
+    if (perm.needsMore && !perm.moreSent) return e.say(`Read it first: more ${a.id}`);
     e.update((s) => void (s.permissions = s.permissions.filter((p) => p.id !== a.id)));
     e.notify("notifications/claude/channel/permission", { request_id: a.id, behavior: a.behavior });
     return e.say(a.behavior === "allow" ? "Approved." : "Denied.");

@@ -3,6 +3,8 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAway } from "../plugin/server/away.ts";
+import { makeAct } from "../plugin/server/deliver.ts";
+import { fresh } from "../plugin/server/state.ts";
 import { LEASE_MS } from "../plugin/server/lease.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { withStore } from "../plugin/server/store.ts";
@@ -84,7 +86,10 @@ test("a stale owner is adopted, permissions included", async () => {
   await i2.call("set_away", { on: true });
   await i1.call("set_away", { on: true });
   await request(i2);
-  h.clock.t += LEASE_MS + 1;
+  for (let waited = 0; waited <= LEASE_MS; waited += 10_000) {
+    h.clock.t += 10_000; // I2 keeps ticking, so it is awake; the owner stays silent
+    await i2.away.pollOnce();
+  }
   h.queue("late");
   await i2.away.pollOnce();
   expect(h.owner()).toBe("I2");
@@ -94,7 +99,24 @@ test("a stale owner is adopted, permissions included", async () => {
   expect(i2.verdicts().length).toBe(1);
 });
 
-test("a live owner is not adopted", async () => {
+test("after a laptop sleep a sibling does not steal the project", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  const y = h.mk("Y");
+  await y.call("set_away", { on: true });
+  await x.call("set_away", { on: true });
+  expect(h.owner()).toBe("X");
+  await y.away.pollOnce();
+  h.clock.t += 10 * 60_000; // everything slept
+  await y.away.pollOnce();
+  expect(h.owner()).toBe("X");
+  await x.away.pollOnce(); // the owner wakes and shows it is alive
+  h.clock.t += LEASE_MS - 1_000;
+  await y.away.pollOnce();
+  expect(h.owner()).toBe("X");
+});
+
+test("a live owner is not adopted",async () => {
   const h = pair();
   const i2 = h.mk("I2");
   const i1 = h.mk("I1");
@@ -117,4 +139,71 @@ test("the inbox drains on its own 5 s timer while the Graph poll is backed off",
   tick.go();
   await new Promise((r) => setTimeout(r, 20));
   expect(i1.channel()).toEqual(["now"]);
+});
+
+test("two servers in one project: only the owner polls Graph and delivers", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  const y = h.mk("Y");
+  await x.call("set_away", { on: true });
+  expect(h.owner()).toBe("X");
+  x.fake.reply("deploy it", h.clock.t);
+  y.fake.reply("deploy it", h.clock.t);
+  await y.away.pollOnce();
+  expect(y.channel()).toEqual([]);
+  expect(y.fake.inbox.length).toBe(1); // Y never polled Graph
+  await x.away.pollOnce();
+  expect(x.channel()).toEqual(["deploy it"]);
+  expect(y.channel()).toEqual([]);
+  expect(withStore(h.dir, h.clock.t, (s) => s.lease?.owner)).toBe("X");
+});
+
+test("the cursor never moves backwards", async () => {
+  const h = pair();
+  const x = h.mk("X");
+  await x.call("set_away", { on: true });
+  const later = new Date(h.clock.t + 10_000).toISOString();
+  withStore(h.dir, h.clock.t, (s) => void (s.cursor = later));
+  x.fake.poll = async () => [{ id: "m1", from: "user-1", text: "old", at: new Date(h.clock.t + 5).toISOString() }];
+  await x.away.pollOnce();
+  expect(x.channel()).toEqual([]);
+  expect(withStore(h.dir, h.clock.t, (s) => s.cursor)).toBe(later);
+});
+
+const expiredPermission =(h: ReturnType<typeof pair>, extra = {}) =>
+  withStore(h.dir, h.clock.t, (s) => void s.projects[KEY]!.permissions.push({ id: "abcde", tool: "Bash", at: h.clock.t, instance: "I1", needsMore: true, ...extra }));
+
+test("an id older than wait_minutes is not approved by yes <id>", async () => {
+  const h = pair();
+  const i1 = h.mk("I1");
+  await i1.call("set_away", { on: true });
+  expiredPermission(h);
+  h.clock.t += 61 * 60_000;
+  i1.fake.reply("yes abcde", h.clock.t);
+  await i1.away.pollOnce();
+  expect(i1.verdicts()).toEqual([]);
+});
+
+test("a bare yes with one expired permission is not approved", async () => {
+  const h = pair();
+  const i1 = h.mk("I1");
+  await i1.call("set_away", { on: true });
+  expiredPermission(h, { needsMore: false });
+  h.clock.t += 61 * 60_000;
+  i1.fake.reply("yes", h.clock.t);
+  await i1.away.pollOnce();
+  expect(i1.verdicts()).toEqual([]);
+});
+
+test("a verdict for an id that is no longer pending says so and notifies nothing", async () => {
+  const said: string[] = [];
+  const notes: string[] = [];
+  const act = makeAct({
+    dir: "", key: KEY, instance: "I1", now: () => T, hours: 9, current: () => ({ ...fresh(), permissions: [] }),
+    update: () => fresh(), say: async (t) => void said.push(t), notify: (m) => void notes.push(m),
+    channel: () => {}, answer: async () => {}, end: () => "",
+  });
+  await act({ kind: "verdict", id: "abcde", behavior: "allow" });
+  expect(notes).toEqual([]);
+  expect(said).toEqual(["That request is no longer waiting."]);
 });

@@ -1,7 +1,7 @@
 {
   "name": "away-mode",
   "displayName": "Away Mode",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Claude messages you in Microsoft Teams when it needs you while you're away, and your replies go straight back into the session.",
   "author": {
     "name": "fbrinadze",
@@ -30,7 +30,7 @@
   },
   "mcpServers": {
     "away": {
-      "command": "${user_config.bun_path}",
+      "command": "bun",
       "args": [
         "${CLAUDE_PLUGIN_ROOT}/server/index.ts"
       ],
@@ -109,12 +109,6 @@
       "title": "Reply-to-message routing",
       "description": "on = quoting a bot message in Teams sends your reply to that message's project. off = use @project.",
       "default": "off"
-    },
-    "bun_path": {
-      "type": "string",
-      "title": "Bun path",
-      "description": "Full path to bun (bun.exe on Windows). setup\\install.ps1 fills this in so Away Mode works even before your terminal picks up a new PATH. Leave as bun if it's on your PATH.",
-      "default": "bun"
     }
   }
 }

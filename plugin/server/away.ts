@@ -3,11 +3,12 @@ import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
+import { LEASE_MS } from "./lease.ts";
 import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
 import { redact } from "./sensitive.ts";
-import { isAway, load, save, tagOf, type State } from "./state.ts";
+import { isAway, load, tagOf, type State, updateView } from "./state.ts";
 import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
@@ -43,7 +44,7 @@ const INSTRUCTIONS = [
 ].join(" ");
 
 export function createAway(d: Deps) {
-  let polling = false;
+  let polling = false, lastTick = d.now(), quietUntil = 0;
   const key = d.key ?? "default";
   const instance = d.instance ?? crypto.randomUUID();
 
@@ -55,13 +56,8 @@ export function createAway(d: Deps) {
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
   }
-  /** Load, change, save with no await in between, so concurrent handlers can't clobber state. */
-  function update(fn: (s: State) => void): State {
-    const s = current();
-    fn(s);
-    save(d.dir, s, key);
-    return s;
-  }
+  /** Read, change and write in one locked call, so hooks and other servers can't be clobbered. */
+  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), d.now() - d.waitMinutes * 60_000, fn);
   const away = () => isAway(current(), d.now());
   const announce = (name: string, text: string) => {
     const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);
@@ -70,7 +66,7 @@ export function createAway(d: Deps) {
   const say = (text: string) => announce(d.project, text);
   const life = { dir: d.dir, key, instance, now: d.now, sessions: d.sessions };
   const end = (reason: EndReason) => endProject(life, reason);
-  const poller = () => ({ dir: d.dir, key, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, deliverLocal: (r: Routed) => act(r.action), announce });
+  const poller = () => ({ dir: d.dir, key, instance, now: d.now, adapter: d.adapter, replyRouting: d.replyRouting, waitMinutes: d.waitMinutes, deliverLocal: (r: Routed) => act(r.action), announce });
 
   function startPolling(): void {
     if (polling) return;
@@ -94,7 +90,11 @@ export function createAway(d: Deps) {
   async function drainMine(): Promise<void> {
     const ended = endedAtTerminal(life);
     if (ended) await say(ended);
-    adopt(d.dir, key, instance, d.now());
+    // A process that slept woke up stale together with its owner: hold off adopting for one full lease.
+    const t = d.now();
+    if (t - lastTick > LEASE_MS) quietUntil = t + LEASE_MS;
+    lastTick = t;
+    if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
   }
 

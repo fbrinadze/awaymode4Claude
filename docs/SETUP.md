@@ -33,7 +33,7 @@ It:
 1. **Checks prerequisites:** the Azure CLI, Claude Code and Bun (installing Bun with winget if needed).
 2. **Creates or reuses the Azure side.** It runs `create-app.ps1` (below) and adds a fresh bot secret without ever showing it.
 3. **Puts Away Mode in Teams.** It signs you in to the Teams PowerShell module (installing it if needed) and publishes the app to your organization's apps, or updates it if it's already there. It then makes the app **available to** and **installs it for** you and anyone in `-ForUsers`. Installs can take a few minutes to show up.
-4. **Installs the plugin** with `claude plugin install away-mode@awaymode`, and saves the Tenant ID, Bot app ID and Bot secret with `claude plugin configure`. The secret goes to your OS keychain.
+4. **Installs the plugin** with `claude plugin install away-mode@awaymode`, and saves the Tenant ID, Bot app ID and Bot secret (plus the `sessions` and `reply_routing` settings, from `-Sessions several|one` and `-ReplyRouting on|off`) with `claude plugin configure`. The secret goes to your OS keychain.
 5. **Prints what to do next.**
 
 It's safe to re-run. Each run adds one new bot secret; older ones keep working until you delete them in Entra (**App registrations → away-mode → Certificates & secrets**).
@@ -77,9 +77,7 @@ If the terminal closes after you sign in, start Claude Code again and say "I sig
 
 ## Troubleshooting
 
-- **Away Mode's server won't start, or hooks say `bun` isn't found.** Claude Code only sees the PATH it was started with. On Windows, terminal apps like Windows Terminal and VS Code keep the PATH they had when they opened, even in a new tab, so Bun installed afterwards is invisible to them. Either:
-  - set **Bun path** under `/plugin` → Away Mode to the full path of `bun.exe` (run `bun -e "console.log(process.execPath)"` in any window where `bun` works). The Windows installer does this for you, or
-  - fully quit your terminal app (every window) and open it again.
+- **Away Mode's server won't start, or hooks say `bun` isn't found.** Claude Code only sees the PATH it was started with, and terminal apps like Windows Terminal and VS Code keep the PATH they had when they opened, so Bun installed afterwards can be invisible to them. The Windows installer links Bun into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is always on PATH. After a Bun update, rerun the installer to refresh that link. If the installer warned that Bun wasn't linked, fully quit your terminal app (every window) and open it again.
 
 ## Removing it
 
