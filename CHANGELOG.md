@@ -17,6 +17,7 @@ All notable changes are listed here. Format follows [Keep a Changelog](https://k
 - The installer links Bun into `%LOCALAPPDATA%\Microsoft\WindowsApps`, which is always on PATH, so the plugin runs plain `bun` and the `bun_path` setting is gone.
 - `state.json` is now version 2 (one entry per project). It's migrated on first start, keeping your pairing; pending questions and approvals from before the upgrade are dropped.
 - A session started in your home folder is shown as `home` in Teams.
+- **Upgrading from 1.0.x:** the bun_path setting is gone. If Away Mode can't start after updating, rerun setup\install.ps1 (it links Bun into WindowsApps) or fully restart your terminal app.
 
 ### Security
 From the follow-up security audit (run-2):
