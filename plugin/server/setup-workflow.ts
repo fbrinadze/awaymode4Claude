@@ -1,7 +1,7 @@
 // Pairing on the workflow route: send a code through the flow, then find the chat it landed in.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { buildCard } from "./adapters/card.ts";
+import { buildCard, hasMarker } from "./adapters/card.ts";
 import { botText, type GraphMsg } from "./adapters/graph-chat.ts";
 import { postCard, workflowAdapter, type WorkflowConfig } from "./adapters/workflow.ts";
 import type { SetupDeps } from "./setup.ts";
@@ -54,8 +54,7 @@ async function findChat(o: PairOptions, token: string, code: string): Promise<st
     const id = String(c.id);
     const msgs = await call(o.net, `${GRAPH}/chats/${encodeURIComponent(id)}/messages?$top=10`, bearer(token));
     const hit = ((msgs.value ?? []) as GraphMsg[]).some((m) => {
-      const t = m.from?.application ? botText(m) : "";
-      return t.includes(code) && t.includes(`ref ${o.ref}`);
+      return !!m.from?.application && botText(m).includes(code) && hasMarker(m.attachments ?? [], o.ref);
     });
     if (hit) return id;
   }

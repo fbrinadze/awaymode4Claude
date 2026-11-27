@@ -31,12 +31,27 @@ export function buildCard(text: string, meta: SendMeta | undefined, ref: string)
     version: "1.4",
     body: [
       // The project is a folder name, so it's a literal TextRun too: `_x_` must not turn italic.
-      { type: "RichTextBlock", inlines: [{ type: "TextRun", text: meta?.project ? `Claude Code · ${meta.project}` : "Claude Code", weight: "Bolder", size: "Medium", color: "Accent" }] },
+      // The install marker is this element's id: never shown, kept by Power Automate and Graph (live probe).
+      { type: "RichTextBlock", id: `away-${ref}`, inlines: [{ type: "TextRun", text: meta?.project ? `Claude Code · ${meta.project}` : "Claude Code", weight: "Bolder", size: "Medium", color: "Accent" }] },
       { type: "TextBlock", text: `Away Mode · ${LABELS[kind]}`, isSubtle: true, size: "Small", spacing: "None", wrap: true },
       { type: "RichTextBlock", inlines: lines(text, meta?.code) },
-      { type: "TextBlock", text: `ref ${ref}`, isSubtle: true, size: "Small", wrap: true },
     ],
   };
+}
+
+/** True if any element in these card attachments has our marker as its id (not merely as text). */
+export function hasMarker(attachments: { contentType?: string; content?: string | null }[], ref: string): boolean {
+  const want = `away-${ref}`;
+  const walk = (n: unknown): boolean =>
+    Array.isArray(n) ? n.some(walk) : !!n && typeof n === "object" && ((n as { id?: unknown }).id === want || Object.values(n).some(walk));
+  return attachments.some((a) => {
+    if (a.contentType !== "application/vnd.microsoft.card.adaptive" || !a.content) return false;
+    try {
+      return walk(JSON.parse(a.content));
+    } catch {
+      return false; // unparseable card: not ours
+    }
+  });
 }
 
 export function cardMessage(card: object) {

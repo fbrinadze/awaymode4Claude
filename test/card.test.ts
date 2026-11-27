@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Kind } from "../plugin/server/adapters/adapter.ts";
-import { buildCard, cardMessage } from "../plugin/server/adapters/card.ts";
+import { buildCard, cardMessage, hasMarker } from "../plugin/server/adapters/card.ts";
 
 type El = { type: string; text?: string; inlines?: El[]; fontType?: string; weight?: string; color?: string; isSubtle?: boolean };
 const body = (c: Record<string, unknown>) => c.body as El[];
@@ -60,9 +60,12 @@ test("no code: nothing is monospace", () => {
   expect(runs(c).some((x) => x.fontType)).toBe(false);
 });
 
-test("ref footer is last", () => {
-  const last = body(buildCard("hi", {}, "k3x9q2ab")).at(-1)!;
-  expect(last).toMatchObject({ type: "TextBlock", text: "ref k3x9q2ab", isSubtle: true });
+test("the ref is the header's id and is never shown", () => {
+  const c = buildCard("hi", { project: "p" }, "k3x9q2ab");
+  expect(body(c)[0]!).toMatchObject({ id: "away-k3x9q2ab" });
+  expect(JSON.stringify(c).match(/k3x9q2ab/g)).toHaveLength(1);
+  expect(hasMarker([{ contentType: "application/vnd.microsoft.card.adaptive", content: JSON.stringify(c) }], "k3x9q2ab")).toBe(true);
+  expect(hasMarker([{ contentType: "application/vnd.microsoft.card.adaptive", content: '{"body":[{"type":"TextBlock","text":"away-k3x9q2ab"}]}' }], "k3x9q2ab")).toBe(false);
 });
 
 test("cardMessage wraps the card as an Adaptive Card attachment", () => {

@@ -34,7 +34,7 @@ test("a network failure doesn't leak the URL either", async () => {
 });
 
 test("poll ignores app messages and learns tags only from cards with our ref", async () => {
-  const card = (ref: string) => ({ contentType: "application/vnd.microsoft.card.adaptive", content: JSON.stringify({ body: [{ type: "TextBlock", text: "Claude Code · app" }, { type: "TextBlock", text: `ref ${ref}` }] }) });
+  const card = (ref: string) => ({ contentType: "application/vnd.microsoft.card.adaptive", content: JSON.stringify({ body: [{ type: "RichTextBlock", id: `away-${ref}`, inlines: [{ type: "TextRun", text: "Claude Code · app" }] }] }) });
   const app = { user: null, application: { id: "wf" } };
   const quote = (id: string) => ({ contentType: "messageReference", content: JSON.stringify({ messageId: id }) });
   const msg = (id: string, at: string, over: object) => ({ id, messageType: "message", lastModifiedDateTime: at, createdDateTime: at, from: { user: { id: "user-1" } }, body: { content: `<p>${id}</p>` }, ...over });

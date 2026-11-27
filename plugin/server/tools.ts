@@ -3,7 +3,7 @@ import type { Json, Tool } from "./mcp.ts";
 import type { EndReason } from "./recap.ts";
 import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
-import { resolveUntil } from "./when.ts";
+import { clock, resolveUntil } from "./when.ts";
 
 export interface Ctx {
   deps: { hours: number; now(): number };
@@ -34,7 +34,7 @@ const obj = (properties: Json, required: string[]): Json => ({ type: "object", p
 
 /** Away state, open questions and pending approvals, for `status` in Teams and the status tool. */
 export function statusText(s: State, now: number): string {
-  const until = isAway(s, now) ? `Away until ${new Date(s.awayUntil).toString()}` : "Not away";
+  const until = isAway(s, now) ? `Away until ${clock(s.awayUntil, now)}` : "Not away";
   const qs = s.questions.map((q) => `\n${q.id}: ${q.text}`).join("");
   return `${until}. ${s.questions.length} open question(s), ${s.permissions.length} pending approval(s).${qs}`;
 }

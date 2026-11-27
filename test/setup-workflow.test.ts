@@ -12,7 +12,8 @@ const jwt = (scp: string) => `h.${Buffer.from(JSON.stringify({ scp })).toString(
 const auth = (scp = "User.Read Chat.Read") => ({ graphToken: async () => jwt(scp) }) as unknown as Auth;
 const card = (...texts: string[]) => ({
   contentType: "application/vnd.microsoft.card.adaptive",
-  content: JSON.stringify({ body: texts.map((text) => ({ type: "TextBlock", text })) }),
+  // "ref X" stands for the hidden install marker: the header element's id.
+  content: JSON.stringify({ body: texts.map((text) => (text.startsWith("ref ") ? { type: "TextBlock", id: `away-${text.slice(4)}`, text: "Claude Code" } : { type: "TextBlock", text })) }),
 });
 const appMsg = (texts: string[]) => ({ id: "m", messageType: "message", lastModifiedDateTime: "x", from: { user: null, application: { id: "wf" } }, attachments: [card(...texts)] });
 

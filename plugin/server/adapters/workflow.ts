@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Net } from "../http.ts";
 import type { Adapter } from "./adapter.ts";
-import { buildCard, cardMessage } from "./card.ts";
+import { buildCard, cardMessage, hasMarker } from "./card.ts";
 import { graphChat } from "./graph-chat.ts";
 
 /** Saved by setup in teams.json; bot-route configs have no `route`. */
@@ -48,7 +48,7 @@ export function installRef(dir: string): string {
 }
 
 export function workflowAdapter(cfg: WorkflowConfig, url: string, ref: string, token: () => Promise<string>, net: Net): Adapter {
-  const reader = graphChat({ chatId: cfg.chatId, token, net, ours: (t) => t.includes(`ref ${ref}`) });
+  const reader = graphChat({ chatId: cfg.chatId, token, net, ours: (m) => hasMarker(m.attachments ?? [], ref) });
   return {
     send: (text, meta) => postCard(url, buildCard(text, meta, ref), net),
     poll: (since) => reader.poll(since),

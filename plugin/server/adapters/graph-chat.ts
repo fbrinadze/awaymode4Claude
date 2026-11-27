@@ -80,15 +80,15 @@ export interface ChatOptions {
   token(): Promise<string>;
   net: Net;
   /** Which app messages are Away Mode's own (default: all). Only those teach reply tags. */
-  ours?(text: string): boolean;
+  ours?(m: GraphMsg): boolean;
 }
 
 export function graphChat(o: ChatOptions): ChatReader {
   // Bot message ID -> project tag, learned from our own messages in poll pages. Newest 200 (Map keeps insertion order).
   const botTags = new Map<string, string>();
   const learn = (m: GraphMsg) => {
+    if (o.ours && !o.ours(m)) return;
     const text = botText(m);
-    if (o.ours && !o.ours(text)) return;
     const hit = BOT_TAG.exec(text);
     const tag = (hit?.[1] ?? hit?.[2])?.trim();
     if (!tag) return;

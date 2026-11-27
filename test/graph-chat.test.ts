@@ -32,7 +32,7 @@ async function replyTagFor(cardTexts: string[]) {
     graphMsg("c1", "2026-11-26T18:00:03.000Z", { from: fromApp, body: { content: '<attachment id="a"></attachment>' }, attachments: [card(...cardTexts)] }),
   ];
   const { net } = fakeNet([["GET https://graph.microsoft.com/v1.0/chats/", () => ({ value: page })]]);
-  const reader = graphChat({ chatId: "19:x", token: async () => "G", net, ours: (t) => t.includes("ref k3x9q2ab") });
+  const reader = graphChat({ chatId: "19:x", token: async () => "G", net, ours: (m) => JSON.stringify(m).includes("ref k3x9q2ab") });
   return (await reader.poll("2026-11-26T18:00:00.000Z")).find((m) => m.id === "r1")?.replyTag;
 }
 
