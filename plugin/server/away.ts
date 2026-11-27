@@ -116,7 +116,7 @@ export function createAway(d: Deps) {
   }
 
   const act = makeAct({
-    dir: d.dir, key, instance, now: d.now, current, update, say, channel, answer,
+    dir: d.dir, key, instance, now: d.now, hours: d.hours, current, update, say, channel, answer,
     notify: (m, p) => server.notify(m, p),
   });
 

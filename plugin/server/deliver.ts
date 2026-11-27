@@ -1,8 +1,10 @@
 // Per-project delivery: acting on a routed action, and which server instance owns delivery.
 import { LEASE_MS } from "./lease.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
+import { tagFor } from "./project.ts";
 import type { Action } from "./route.ts";
-import type { State } from "./state.ts";
+import { isAway, type State } from "./state.ts";
+import { resolveUntil } from "./when.ts";
 import { withStore } from "./store.ts";
 import { statusText } from "./tools.ts";
 
@@ -12,6 +14,8 @@ export interface DeliverEnv {
   /** This server's instance token. */
   instance: string;
   now(): number;
+  /** Default away length; only used by resolveUntil's fallback. */
+  hours: number;
   current(): State;
   update(fn: (s: State) => void): State;
   say(text: string): Promise<void>;
@@ -51,6 +55,17 @@ export function drainOwned(dir: string, key: string, instance: string, now: numb
   });
 }
 
+/** `extend 30m` / `until 6pm`: moves this project's end. Not away any more: nothing changes. */
+async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Promise<void> {
+  const tag = withStore(e.dir, e.now(), (s) => tagFor(e.key, s));
+  const now = e.now();
+  if (!isAway(e.current(), now)) return e.say(`Away mode already ended for ${tag}.`);
+  const until = "minutes" in a ? e.current().awayUntil + a.minutes * 60_000 : resolveUntil({ at: a.at }, now, e.hours);
+  if (!(until > now)) return e.say("Couldn't read that time. Try \"extend 30m\" or \"until 6pm\".");
+  e.update((s) => void (s.awayUntil = until));
+  return e.say(`Away until ${new Date(until).toString()} for ${tag}.`);
+}
+
 export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
   function verdict(a: Extract<Action, { kind: "verdict" }>): Promise<void> {
     const owner = e.current().permissions.find((p) => p.id === a.id)?.instance;
@@ -70,7 +85,9 @@ export function makeAct(e: DeliverEnv): (a: Action) => Promise<void> {
         e.channel(a.text, { kind: "instruction" });
         return e.say("Got it, passing that to Claude.");
       case "status": return e.say(statusText(e.current(), e.now()));
-      case "extend": case "snooze": case "unsnooze": case "more": return e.say("Coming soon."); // delivery lands in a later task
+      case "extend": return extend(e, a);
+      case "more": return e.say("Coming soon.");
+      case "snooze": case "unsnooze": return e.say("Coming soon."); // delivery lands in a later task
       case "back":
         e.update((s) => void (s.awayUntil = 0));
         e.channel("The user ended away mode from Teams.", { kind: "back" });
