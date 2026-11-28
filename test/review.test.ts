@@ -20,7 +20,7 @@ class FakeKA implements KeepAwake {
 }
 /** A KeepAwake whose hold never takes. */
 class FailingKA extends FakeKA {
-  hold(display: boolean) { this.holds.push(display); }
+  override hold(display: boolean) { this.holds.push(display); }
 }
 
 function setup(over: Partial<Deps> = {}, shared?: { dir: string; clock: { t: number } }, key = "/a") {
@@ -72,4 +72,49 @@ test("days is local-calendar arithmetic across a DST change", async () => {
   await x.tool("set_away", { on: true, vacation: true, days: 5 });
   const d = new Date(x.entry()!.awayUntil);
   expect([d.getMonth(), d.getDate(), d.getHours()]).toEqual([10, 4, 12]);
+});
+
+/** pollOnce, returning the error a failed send raises instead of throwing it (the real loop logs it). */
+const poll = async (x: { away: { pollOnce(): Promise<number> } }): Promise<unknown> => {
+  try { await x.away.pollOnce(); return null; } catch (e) { return e; }
+};
+
+test("a check-in lists only approvals still inside wait_minutes", async () => {
+  const x = setup();
+  await x.tool("set_away", { on: true, vacation: true, days: 5 });
+  const at = local(26, 20);
+  x.clock.t = local(27, 9, 1);
+  x.patch((p) => {
+    p.permissions.push({ id: "abcde", tool: "OLDTOOL", at, description: "", input: "" });
+    p.permissions.push({ id: "fghij", tool: "NEWTOOL", at: x.clock.t - 60_000, description: "", input: "" });
+  });
+  await x.away.pollOnce();
+  const text = checkins(x.adapter)[0]!;
+  expect(text).toContain("NEWTOOL");
+  expect(text).not.toContain("OLDTOOL");
+});
+
+test("a failed check-in send is not lost: it retries and finished is kept", async () => {
+  const x = setup();
+  await x.tool("set_away", { on: true, vacation: true, days: 5 });
+  await x.tool("notify", { type: "finished", text: "built it" });
+  x.clock.t = local(27, 9, 1);
+  x.adapter.failSends = true;
+  expect(await poll(x)).not.toBeNull();
+  expect(x.entry()?.vacation?.finished).toBe(1);
+  expect(x.entry()?.vacation?.lastCheckinAt).toBeLessThan(local(27, 9));
+  x.adapter.failSends = false;
+  await x.away.pollOnce();
+  expect(checkins(x.adapter)).toHaveLength(1);
+  expect(checkins(x.adapter)[0]).toContain("1 finished");
+});
+
+test("keep-awake still ticks when the check-in send fails", async () => {
+  const x = setup();
+  await x.tool("set_away", { on: true, vacation: true, days: 5 });
+  x.ka.release(); // the inbox loop already ticked once at set_away; start from not held
+  x.clock.t = local(27, 9, 1);
+  x.adapter.failSends = true;
+  await poll(x);
+  expect(x.ka.held()).toBe(true);
 });

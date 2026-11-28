@@ -107,6 +107,9 @@ export function save(dir: string, v: State, key = mine.key): void {
   withStore(dir, Date.now(), (s) => putView(s, key, me.tag, v), me);
 }
 
+/** Permissions at or before this time are stale: Claude Code never says when the terminal answered first. */
+export const permCutoff = (now: number, waitMinutes: number): number => now - waitMinutes * 60_000;
+
 /**
  * Read this project's view, change it and write it back inside ONE lock, so a hook or another
  * server's write can't be overwritten by a stale copy. Permissions older than `cutoff` are dropped.

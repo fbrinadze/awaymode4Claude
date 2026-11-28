@@ -2,7 +2,7 @@ import type { Adapter, Kind } from "./adapters/adapter.ts";
 import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
-import { parseCheckins, takeCheckin } from "./checkin.ts";
+import { parseCheckins, sendCheckin } from "./checkin.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
 import { inboxLoop } from "./inbox-loop.ts";
 import { isLaptop, keepAwake, type KeepAwake } from "./keepawake.ts";
@@ -12,7 +12,7 @@ import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
 import { redact } from "./sensitive.ts";
-import { isAway, load, tagOf, type State, updateView } from "./state.ts";
+import { isAway, load, permCutoff, tagOf, type State, updateView } from "./state.ts";
 import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
@@ -59,12 +59,12 @@ export function createAway(d: Deps) {
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
   function current(): State {
     const s = load(d.dir, key);
-    const cutoff = d.now() - d.waitMinutes * 60_000;
+    const cutoff = permCutoff(d.now(), d.waitMinutes);
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
   }
   /** Read, change and write in one locked call, so hooks and other servers can't be clobbered. */
-  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), d.now() - d.waitMinutes * 60_000, fn);
+  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), permCutoff(d.now(), d.waitMinutes), fn);
   const away = () => isAway(current(), d.now());
   const announce = (name: string, text: string, kind: Kind = "reply", code?: string) => {
     const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);
@@ -98,8 +98,8 @@ export function createAway(d: Deps) {
     lastTick = t;
     if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
-    const text = away() ? takeCheckin(d.dir, key, instance, times, d.now()) : null;
-    if (text) await say(text, "checkin"); await keepTick();
+    try { const p = away() ? sendCheckin({ dir: d.dir, key, instance, times, waitMinutes: d.waitMinutes, now: d.now }, (x) => say(x, "checkin")) : null; if (p) await p; }
+    finally { await keepTick(); } // a failed send must not skip it
   }
 
   async function pollOnce(): Promise<number> {

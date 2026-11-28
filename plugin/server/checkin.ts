@@ -1,4 +1,5 @@
 // Vacation check-ins: when one is due, and what it says. Pure; sending is the owner server's job.
+import { permCutoff } from "./state.ts";
 import type { ProjectState } from "./store.ts";
 import { withStore } from "./store.ts";
 import { clock } from "./when.ts";
@@ -64,15 +65,42 @@ export function checkinText(p: ProjectState, now: number): string {
   ].join("\n");
 }
 
-/** Owner only, on vacation, when a check-in is due: marks it taken (one catch-up however many were missed) and returns its text. */
-export function takeCheckin(dir: string, key: string, instance: string, times: CheckinTime[], now: number): string | null {
-  return withStore(dir, now, (s) => {
-    const p = s.projects[key];
-    if (!p?.vacation || p.ownerInstance !== instance || p.awayUntil <= now) return null;
-    if (dueCheckin(times, p.vacation.lastCheckinAt, now) === null) return null;
-    const text = checkinText(p, now);
+export interface CheckinCtx {
+  dir: string;
+  key: string;
+  instance: string;
+  times: CheckinTime[];
+  waitMinutes: number;
+  now(): number;
+}
+
+/** Owner only, on vacation, when a check-in is due: marks it taken (one catch-up however many were missed) and returns its text and the marks it replaced. */
+function takeCheckin(c: CheckinCtx, now: number): { text: string; prev: { at: number; finished: number } } | null {
+  return withStore(c.dir, now, (s) => {
+    const p = s.projects[c.key];
+    if (!p?.vacation || p.ownerInstance !== c.instance || p.awayUntil <= now) return null;
+    if (dueCheckin(c.times, p.vacation.lastCheckinAt, now) === null) return null;
+    const cutoff = permCutoff(now, c.waitMinutes); // expired approvals can't be answered any more
+    const text = checkinText({ ...p, permissions: p.permissions.filter((x) => x.at > cutoff) }, now);
+    const prev = { at: p.vacation.lastCheckinAt, finished: p.vacation.finished };
     p.vacation.lastCheckinAt = now;
     p.vacation.finished = 0;
-    return text;
+    return { text, prev };
+  });
+}
+
+/**
+ * Take the due check-in (if any) and start sending it; null when none is due (so the caller adds no await).
+ * If the send fails the check-in is handed back, so the next tick retries it.
+ */
+export function sendCheckin(c: CheckinCtx, send: (text: string) => Promise<unknown>): Promise<void> | null {
+  const taken = takeCheckin(c, c.now());
+  if (!taken) return null;
+  return send(taken.text).then(() => undefined, (e: unknown) => {
+    withStore(c.dir, c.now(), (s) => {
+      const v = s.projects[c.key]?.vacation;
+      if (v) { v.lastCheckinAt = taken.prev.at; v.finished += taken.prev.finished; }
+    });
+    throw e;
   });
 }
