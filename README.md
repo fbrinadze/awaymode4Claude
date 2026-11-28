@@ -239,7 +239,7 @@ Send these in the Away Mode chat. They must match exactly. Anything else counts 
 
 ## Configuration
 
-Change these under `/plugin` → Away Mode. The installer sets `sessions`, `reply_routing` and `vacation_checkins` for you.
+Change these under `/plugin` → Away Mode. The installer sets `sessions`, `reply_routing` and `vacation_checkins` only when you pass `-Sessions`, `-ReplyRouting` or `-CheckIns`; otherwise it leaves them as they are.
 
 | Setting | Default | Description |
 | --- | --- | --- |
