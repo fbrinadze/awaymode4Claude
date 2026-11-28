@@ -3,6 +3,7 @@ import type { KeepAwake } from "./keepawake.ts";
 import { withStore } from "./store.ts";
 
 export const LAPTOP_NOTE = "On a laptop: keep the lid open, or set 'When I close the lid: Do nothing' while plugged in.";
+const RETRY_MS = 5 * 60_000; // a hold that didn't take is tried again this often, not on every tick
 
 export interface KeepTick {
   dir: string;
@@ -18,11 +19,16 @@ const wanted = (t: KeepTick): boolean =>
     Object.values(s.projects).some((p) => p.vacation && p.ownerInstance === t.instance && p.awayUntil > t.now()));
 
 export function keepAwakeTick(t: KeepTick): () => Promise<void> {
+  let noted = false, retryAt = 0; // per vacation period: reset when the last vacation ends
   return async () => {
-    const want = wanted(t);
-    if (want === t.ka.held()) return;
-    if (!want) return t.ka.release();
-    t.ka.hold(false);
-    if (t.isLaptop()) await t.say(LAPTOP_NOTE);
+    if (!wanted(t)) {
+      noted = false; retryAt = 0;
+      return t.ka.held() ? t.ka.release() : undefined;
+    }
+    if (t.ka.held() || t.now() < retryAt) return;
+    const laptop = t.isLaptop(); // laptops keep the screen on too; desktops let it turn off
+    t.ka.hold(laptop);
+    if (!t.ka.held()) { retryAt = t.now() + RETRY_MS; return; }
+    if (laptop && !noted) { noted = true; await t.say(LAPTOP_NOTE); }
   };
 }

@@ -109,6 +109,32 @@ test("a failed check-in send is not lost: it retries and finished is kept", asyn
   expect(checkins(x.adapter)[0]).toContain("1 finished");
 });
 
+test("a failed hold is retried with backoff, not every tick, and the laptop note waits for a real hold", async () => {
+  const ka = new FailingKA();
+  const x = setup({ keepAwake: ka, isLaptop: () => true });
+  await x.tool("set_away", { on: true, vacation: true, days: 5 });
+  await x.away.pollOnce(); await x.away.pollOnce();
+  expect(ka.holds).toHaveLength(1);
+  x.clock.t += 6 * 60_000;
+  await x.away.pollOnce();
+  expect(ka.holds).toHaveLength(2);
+  expect(x.adapter.sent.filter((m) => m.includes("keep the lid open"))).toHaveLength(0);
+  ka.hold = FakeKA.prototype.hold; // the hold finally works
+  x.clock.t += 6 * 60_000;
+  await x.away.pollOnce(); await x.away.pollOnce();
+  expect(x.adapter.sent.filter((m) => m.includes("keep the lid open"))).toHaveLength(1);
+});
+
+test("laptops keep the screen on, desktops let it turn off", async () => {
+  for (const laptop of [true, false]) {
+    const ka = new FakeKA();
+    const x = setup({ keepAwake: ka, isLaptop: () => laptop });
+    await x.tool("set_away", { on: true, vacation: true, days: 5 });
+    await x.away.pollOnce();
+    expect(ka.holds).toEqual([laptop]);
+  }
+});
+
 test("keep-awake still ticks when the check-in send fails", async () => {
   const x = setup();
   await x.tool("set_away", { on: true, vacation: true, days: 5 });

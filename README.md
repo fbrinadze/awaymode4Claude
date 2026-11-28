@@ -208,11 +208,13 @@ What vacation adds:
 - **Check-ins.** At the times in `vacation_checkins` (default `9:00`), the bot sends a Check-in card. It starts with `On vacation until <time>`. Then it lists what is waiting for you (approvals with their `yes <id>` / `no <id>` reply, and open questions, each with how many hours they have waited), any parked items, and how many tasks finished since the last check-in. If nothing needs you, it says `Still working. Nothing needs you.` Several times are comma-separated, for example `9:00,18:00` (`9am` and `6pm` also work). Entries it can't read are ignored, and if none are readable it uses `9:00`. After a long sleep you get one catch-up check-in, not one per missed time.
 - **Approvals.** An approval waiting at a check-in can be answered from Teams as usual, with `yes <id>`. An unanswered approval follows `wait_minutes` and `end_of_day_action` like in any away period, so a long wait can cancel it. The check-in lists what is waiting at that moment.
 - **Day-sized times.** `extend 2d` adds two days, and `until monday` sets the end to the next Monday (never today) at `vacation_return_time` (default `9:00`). See [Teams commands](#teams-commands).
-- **Your PC stays awake.** While a project is on vacation, Away Mode asks the computer not to go to sleep (the screen may still turn off). It lets go as soon as the last vacation ends: `back`, time up, or typing at the terminal.
+- **Your PC stays awake.** While a project is on vacation, Away Mode asks the computer not to go to sleep. A desktop lets the screen turn off; a laptop (Away Mode finds a battery) keeps the screen on too. It lets go as soon as the last vacation ends: `back`, time up, or typing at the terminal.
 - **Laptops.** The computer sleeps when you close the lid unless you change that. When Away Mode finds a battery, Teams gets one note when vacation starts: *On a laptop: keep the lid open, or set 'When I close the lid: Do nothing' while plugged in.* `/away-mode:doctor` shows a `keep awake` line while a vacation is running, and repeats the lid warning on a laptop.
 - **A 30-day ceiling.** No away period, vacation or not, can last longer than 30 days. A longer request is refused with "Away mode can last at most 30 days.", so a typo can't keep a PC awake for a year.
 
 **A missed check-in means the PC or Claude Code stopped.** Check-ins come from the session on your computer. If one doesn't arrive, the PC went to sleep or off, lost its network, or Claude Code was closed. Away Mode can't send a "last gasp" from a machine that has stopped.
+
+Asking again without the vacation words (a plain "away until 5pm" on a project that is on vacation) extends the time and keeps vacation on. Say `back` to end it.
 
 To end vacation early, reply `back`, run `/away-mode:back`, or type in the terminal. As with any away period, Teams gets a recap.
 
