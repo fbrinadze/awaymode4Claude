@@ -5,6 +5,8 @@ import { MIN_DELAY, pollLoop } from "./poll.ts";
 import { parseCheckins, takeCheckin } from "./checkin.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
 import { inboxLoop } from "./inbox-loop.ts";
+import { isLaptop, keepAwake, type KeepAwake } from "./keepawake.ts";
+import { keepAwakeTick } from "./keepawake-tick.ts";
 import { LEASE_MS } from "./lease.ts";
 import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
@@ -29,6 +31,7 @@ export interface Deps {
   endOfDay?: "park" | "safest";
   instance?: string; // this server's instance token (tests inject one)
   sessions?: "several" | "one"; replyRouting?: boolean; // "one" hands over between projects; replyRouting: a quoted reply picks its project
+  keepAwake?: KeepAwake; isLaptop?: () => boolean; // tests inject fakes
   now(): number;
   sleep(ms: number): Promise<void>;
   write(line: string): void;
@@ -50,6 +53,7 @@ export function createAway(d: Deps) {
   const key = d.key ?? "default";
   const instance = d.instance ?? crypto.randomUUID();
   const times = parseCheckins(d.checkins);
+  const keepTick = keepAwakeTick({ dir: d.dir, instance, now: d.now, ka: d.keepAwake ?? keepAwake(), isLaptop: d.isLaptop ?? (() => isLaptop()), say: (t) => say(t) });
 
   // ponytail: pending permissions expire after wait_minutes because Claude Code never says
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
@@ -95,7 +99,7 @@ export function createAway(d: Deps) {
     if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
     const text = away() ? takeCheckin(d.dir, key, instance, times, d.now()) : null;
-    if (text) await say(text, "checkin");
+    if (text) await say(text, "checkin"); await keepTick();
   }
 
   async function pollOnce(): Promise<number> {
