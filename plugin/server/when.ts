@@ -3,10 +3,18 @@ import type { Json } from "./mcp.ts";
 const CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
-/** The next `day` (0 = Sunday) after today, local time, at returnTime; NaN when returnTime is unreadable. */
+/** `days` from now by the local calendar, so a DST change doesn't shift the clock time. */
+export function daysFrom(now: number, days: number): number {
+  const whole = Math.floor(days);
+  const d = new Date(now);
+  d.setDate(d.getDate() + whole);
+  return d.getTime() + (days - whole) * 86_400_000;
+}
+
+/** The next `day` (0 = Sunday) after today, local time, at returnTime; an unreadable returnTime means 9:00. */
 function nextDay(day: number, now: number, returnTime: string): number {
-  const t = resolveUntil({ at: returnTime }, now, 0);
-  if (Number.isNaN(t)) return NaN;
+  let t = resolveUntil({ at: returnTime }, now, 0);
+  if (Number.isNaN(t)) t = resolveUntil({ at: "9:00" }, now, 0);
   const d = new Date(t);
   d.setFullYear(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate());
   d.setDate(d.getDate() + (((day - d.getDay() + 6) % 7) + 1));

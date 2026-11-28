@@ -3,10 +3,10 @@ import type { Json, Tool } from "./mcp.ts";
 import type { EndReason } from "./recap.ts";
 import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
-import { clock, MAX_AWAY_MS, resolveUntil } from "./when.ts";
+import { clock, daysFrom, MAX_AWAY_MS, resolveUntil } from "./when.ts";
 
 export interface Ctx {
-  deps: { hours: number; now(): number };
+  deps: { hours: number; now(): number; returnTime?: string }; // returnTime: where a weekday "at" lands (default "9:00")
   current(): State;
   update(fn: (s: State) => void): State;
   say(text: string, kind?: Kind): Promise<void>;
@@ -128,7 +128,7 @@ export function makeTools(c: Ctx): Tool[] {
         return "Away mode off.";
       }
       const days = typeof a.days === "number" && a.days > 0 ? a.days : 0;
-      const until = days ? now + days * 86_400_000 : resolveUntil(a, now, c.deps.hours);
+      const until = days ? daysFrom(now, days) : resolveUntil(a, now, c.deps.hours, c.deps.returnTime);
       if (until > now + MAX_AWAY_MS) throw new Error("Away mode can last at most 30 days.");
       if (!(until > now)) {
         throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
