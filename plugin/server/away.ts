@@ -20,7 +20,7 @@ export interface Deps {
   key?: string;
   project: string;
   hours: number;
-  waitMinutes: number;
+  waitMinutes: number; returnTime?: string; // weekday "until" lands here (default "9:00")
   /** Patterns approved only at the terminal (never_relay). */
   neverRelay?: string[];
   /** With no reply after waitMinutes: park the task, or continue safely. */
@@ -123,7 +123,7 @@ export function createAway(d: Deps) {
   async function onNotification(method: string, p: Json): Promise<void> { if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p); }
 
   const act = makeAct({
-    dir: d.dir, key, instance, now: d.now, hours: d.hours, current, update, say, channel, answer,
+    dir: d.dir, key, instance, now: d.now, hours: d.hours, returnTime: d.returnTime ?? "9:00", current, update, say, channel, answer,
     notify: (m, p) => server.notify(m, p), end, room: CAP - `[Claude · ${d.project}] `.length,
   });
 

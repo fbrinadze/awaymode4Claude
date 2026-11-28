@@ -4,6 +4,8 @@ import type { Action } from "./route.ts";
 const DUR = String.raw`(\d+)\s*(m|min|mins|minutes?|h|hrs?|hours?)`;
 const CLOCK = String.raw`(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)`;
 const EXTEND = new RegExp(`^extend\\s+${DUR}$`);
+const EXTEND_DAYS = /^extend\s+(\d+)\s*d(?:ays?)?$/;
+const WEEKDAY = /^until\s+((?:mon|tue|wed|thu|fri|sat|sun)(?:day|sday|nesday|rsday|urday)?)$/;
 const UNTIL = new RegExp(`^until\\s+${CLOCK}$`);
 const SNOOZE = new RegExp(`^snooze\\s+${DUR}$`);
 const SNOOZE_UNTIL = new RegExp(`^snooze\\s+until\\s+${CLOCK}$`);
@@ -15,7 +17,11 @@ const minutes = (n: string, unit: string) => Number(n) * (unit.startsWith("h") ?
 export function parseCommand(text: string): Action | null {
   const t = text.trim().toLowerCase();
   if (t === "status" || t === "back" || t === "unsnooze") return { kind: t };
-  let m = EXTEND.exec(t);
+  let m = EXTEND_DAYS.exec(t);
+  if (m) return { kind: "extend", minutes: Number(m[1]) * 1440 };
+  m = WEEKDAY.exec(t);
+  if (m) return { kind: "extend", at: m[1]! };
+  m = EXTEND.exec(t);
   if (m) return { kind: "extend", minutes: minutes(m[1]!, m[2]!) };
   m = UNTIL.exec(t);
   if (m) return { kind: "extend", at: m[1]! };

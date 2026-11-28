@@ -12,7 +12,7 @@ function env(awayUntil: number) {
   const st = { ...fresh(), awayUntil };
   const said: string[] = [];
   const act = makeAct({
-    dir: mkdtempSync(join(tmpdir(), "away-ext-")), key: "/x/order-portal", instance: "i1", hours: 9,
+    dir: mkdtempSync(join(tmpdir(), "away-ext-")), key: "/x/order-portal", instance: "i1", hours: 9, returnTime: "9:00",
     now: () => T, current: () => st, update: (fn) => (fn(st), st), say: async (t) => void said.push(t),
     notify: () => {}, channel: () => {}, answer: async () => {}, end: () => "",
   });
@@ -33,7 +33,7 @@ function envAt(now: number) {
   const st = { ...fresh(), awayUntil: now + 3_600_000 };
   const said: string[] = [];
   const act = makeAct({
-    dir: mkdtempSync(join(tmpdir(), "away-ext-")), key: "/x/order-portal", instance: "i1", hours: 9,
+    dir: mkdtempSync(join(tmpdir(), "away-ext-")), key: "/x/order-portal", instance: "i1", hours: 9, returnTime: "9:00",
     now: () => now, current: () => st, update: (fn) => (fn(st), st), say: async (t) => void said.push(t),
     notify: () => {}, channel: () => {}, answer: async () => {}, end: () => "",
   });
@@ -71,4 +71,17 @@ test("extending a project that is no longer away changes nothing", async () => {
   await e.act({ kind: "extend", minutes: 30 });
   expect(e.st.awayUntil).toBe(0);
   expect(e.said.at(-1)).toBe("Away mode already ended for order-portal.");
+});
+
+test("until monday from Teams moves the end to Monday 9:00", async () => {
+  const e = envAt(new Date(2026, 10, 26, 14).getTime()); // Thursday
+  await e.act({ kind: "extend", at: "monday" });
+  expect(e.st.awayUntil).toBe(new Date(2026, 10, 30, 9).getTime());
+});
+
+test("extend 31d is refused", async () => {
+  const e = envAt(at(14));
+  await e.act({ kind: "extend", minutes: 31 * 1440 });
+  expect(e.st.awayUntil).toBe(e.before);
+  expect(e.said.at(-1)).toBe("Away mode can last at most 30 days.");
 });

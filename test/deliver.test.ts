@@ -199,7 +199,7 @@ test("a verdict for an id that is no longer pending says so and notifies nothing
   const said: string[] = [];
   const notes: string[] = [];
   const act = makeAct({
-    dir: "", key: KEY, instance: "I1", now: () => T, hours: 9, current: () => ({ ...fresh(), permissions: [] }),
+    dir: "", key: KEY, instance: "I1", now: () => T, hours: 9, returnTime: "9:00", current: () => ({ ...fresh(), permissions: [] }),
     update: () => fresh(), say: async (t) => void said.push(t), notify: (m) => void notes.push(m),
     channel: () => {}, answer: async () => {}, end: () => "",
   });

@@ -1,14 +1,27 @@
 import type { Json } from "./mcp.ts";
 
 const CLOCK = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
+const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+
+/** The next `day` (0 = Sunday) after today, local time, at returnTime; NaN when returnTime is unreadable. */
+function nextDay(day: number, now: number, returnTime: string): number {
+  const t = resolveUntil({ at: returnTime }, now, 0);
+  if (Number.isNaN(t)) return NaN;
+  const d = new Date(t);
+  d.setFullYear(new Date(now).getFullYear(), new Date(now).getMonth(), new Date(now).getDate());
+  d.setDate(d.getDate() + (((day - d.getDay() + 6) % 7) + 1));
+  return d.getTime();
+}
 
 /**
  * End time in epoch ms, from the server's own clock and timezone. Claude knows the date but not
  * the time, so "for 30 minutes" and "back at 1:30" are resolved here. NaN means unusable.
  */
-export function resolveUntil(a: Json, now: number, hours: number): number {
+export function resolveUntil(a: Json, now: number, hours: number, returnTime = "9:00"): number {
   if (typeof a.minutes === "number") return a.minutes > 0 ? now + a.minutes * 60_000 : NaN;
   if (typeof a.at === "string") {
+    const day = DAYS.findIndex((n) => a.at === n || (a.at as string).toLowerCase() === n || (a.at as string).toLowerCase() === n.slice(0, 3));
+    if (day >= 0) return nextDay(day, now, returnTime);
     const m = CLOCK.exec(a.at.trim());
     if (!m) return NaN;
     let h = Number(m[1]);
