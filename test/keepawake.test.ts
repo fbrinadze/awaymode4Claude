@@ -3,6 +3,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { decide } from "../plugin/hooks/hook.ts";
 import { createAway } from "../plugin/server/away.ts";
 import type { KeepAwake } from "../plugin/server/keepawake.ts";
 import type { Json } from "../plugin/server/mcp.ts";
@@ -63,9 +64,24 @@ test("released on expiry", async () => {
 test("released on terminal input", async () => {
   const s = setup();
   await vac(s); await s.tick();
-  s.patch((p) => { p.awayUntil = 0; }); // what the hook does
+  // The patch the UserPromptSubmit hook itself decides on for terminal input.
+  s.patch((p) => Object.assign(p, decide({ hook_event_name: "UserPromptSubmit", prompt: "I'm back" }, p, s.clock.t).patch));
   await s.tick();
   expect(s.ka.held()).toBe(false);
+});
+
+test("two real servers: each holds for its own vacation, the PC stays held until the last ends", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "away-")), clock = { t: T };
+  const a = setup(false, dir, clock, "/a"), b = setup(false, dir, clock, "/b");
+  await vac(a); await vac(b);
+  await a.tick(); await b.tick();
+  expect([a.ka.held(), b.ka.held()]).toEqual([true, true]);
+  a.patch((p) => { p.awayUntil = 0; });
+  await a.tick(); await b.tick();
+  expect([a.ka.held(), b.ka.held()]).toEqual([false, true]);
+  b.patch((p) => { p.awayUntil = 0; }, "/b");
+  await a.tick(); await b.tick();
+  expect([a.ka.held(), b.ka.held()]).toEqual([false, false]);
 });
 
 test("released on handover", async () => {

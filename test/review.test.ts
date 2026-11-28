@@ -6,6 +6,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAway, type Deps } from "../plugin/server/away.ts";
+import { dueCheckin } from "../plugin/server/checkin.ts";
 import { type KeepAwake, keepAwake } from "../plugin/server/keepawake.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { projectKey } from "../plugin/server/project.ts";
@@ -47,7 +48,6 @@ function setup(over: Partial<Deps> = {}, shared?: { dir: string; clock: { t: num
   return { tool, entry, patch, adapter, away, dir, clock, ka };
 }
 const checkins = (a: FakeAdapter) => a.meta.flatMap((m, i) => (m.kind === "checkin" ? [a.sent[i]!] : []));
-void checkins; void FailingKA;
 
 const TZ = process.env.TZ;
 afterEach(() => { if (TZ === undefined) delete process.env.TZ; else process.env.TZ = TZ; });
@@ -135,6 +135,19 @@ test("laptops keep the screen on, desktops let it turn off", async () => {
     await x.away.pollOnce();
     expect(ka.holds).toEqual([laptop]);
   }
+});
+
+test("dueCheckin is right across DST changes", () => {
+  process.env.TZ = "America/New_York";
+  const nine = [{ h: 9, m: 0 }];
+  // Fall back (2026-11-01): the 9:00 after the change is a 25-hour day away from the previous one.
+  expect(dueCheckin(nine, new Date(2026, 9, 31, 9, 1).getTime(), new Date(2026, 10, 1, 9, 30).getTime())).toBe(new Date(2026, 10, 1, 9, 0).getTime());
+  expect(dueCheckin(nine, new Date(2026, 10, 1, 9, 1).getTime(), new Date(2026, 10, 2, 9, 0).getTime())).toBe(new Date(2026, 10, 2, 9, 0).getTime());
+  // Spring forward (2026-03-08): 2:30 doesn't exist, so it is 3:30; due once, not twice.
+  const early = [{ h: 2, m: 30 }];
+  const t = dueCheckin(early, new Date(2026, 2, 7, 3, 0).getTime(), new Date(2026, 2, 8, 4, 0).getTime());
+  expect(t).toBe(new Date(2026, 2, 8, 2, 30).getTime());
+  expect(dueCheckin(early, t!, new Date(2026, 2, 8, 12, 0).getTime())).toBeNull();
 });
 
 test("the Windows keep-awake touches nothing until the first hold", () => {
