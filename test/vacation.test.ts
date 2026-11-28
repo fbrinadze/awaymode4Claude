@@ -21,6 +21,7 @@ function setup(shared?: { dir: string; now: { t: number } }) {
   const away = createAway({
     adapter, dir, key: projectKey("/a"), project: "a", hours: 9, waitMinutes: 60,
     now: () => clock.t, sleep: () => new Promise(() => {}), write: (l) => void out.push(JSON.parse(l)),
+    keepAwake: { hold() {}, release() {}, held: () => false }, isLaptop: () => false, // never touch real power APIs
   });
   let id = 0;
   const tool = async (name: string, args: Json) => {
