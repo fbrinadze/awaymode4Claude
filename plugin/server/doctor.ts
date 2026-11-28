@@ -6,6 +6,7 @@ import type { Auth } from "./auth.ts";
 import { bearer, call, HttpError, type Net } from "./http.ts";
 import type { Tool } from "./mcp.ts";
 import { workflowLines } from "./doctor-workflow.ts";
+import { isLaptop, keepAwake, type KeepAwake } from "./keepawake.ts";
 import { readStore } from "./store.ts";
 
 export interface DoctorDeps {
@@ -25,6 +26,11 @@ export interface DoctorDeps {
   route?: "bot" | "workflow";
   /** Only whether the workflow URL is set; the URL itself never reaches the doctor. */
   workflowUrlSet?: boolean;
+  /** The instance holding the PC awake; tests inject fakes. */
+  keepAwake?: KeepAwake;
+  /** This server's instance token; only vacations it owns count for keep awake. */
+  instance?: string;
+  isLaptop?: () => boolean;
 }
 
 type Check = string | null; // null = fine, otherwise the fix
@@ -93,6 +99,17 @@ function leaseAndProjects(d: DoctorDeps): string[] {
   return [line("poll lease", null, `poll lease: ${lease}`), line("away projects", null, `away projects: ${projects}`)];
 }
 
+/** Only while a project is on vacation: is the PC being held awake, and on a laptop, what closing the lid does. */
+function keepAwakeLines(d: DoctorDeps): string[] {
+  const s = readStore(d.dir, d.now());
+  const vacations = Object.values(s.projects).filter((p) => p.vacation && p.awayUntil > d.now());
+  if (!vacations.length) return [];
+  if (!vacations.some((p) => p.ownerInstance === d.instance)) return ["keep awake: held by another session"]; // its owner holds the PC, not this server
+  const out = [line("keep awake", (d.keepAwake ?? keepAwake()).held() ? null : "not held; the PC may sleep and miss check-ins")];
+  if ((d.isLaptop ?? (() => isLaptop()))()) out.push("! laptop: closing the lid still sleeps it; set Windows 'when I close the lid' to 'do nothing' for vacation");
+  return out;
+}
+
 async function sendTest(d: DoctorDeps): Promise<string> {
   try {
     await d.current().send("Away Mode doctor: test message. If you can read this in Teams, sending works.");
@@ -116,6 +133,7 @@ export function doctorTool(d: DoctorDeps): Tool {
         ...(wf ? await workflowLines(d) : [settings(d), ...(await graph(d)), pairing(d)]),
         stateFile(d),
         ...leaseAndProjects(d),
+        ...keepAwakeLines(d),
       ];
       if (a.send_test === true) out.push(await sendTest(d));
       return out.join("\n");

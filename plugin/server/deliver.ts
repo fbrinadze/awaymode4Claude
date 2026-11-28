@@ -7,7 +7,7 @@ import { more } from "./more.ts";
 import { tagFor } from "./project.ts";
 import type { Action } from "./route.ts";
 import { isAway, type State } from "./state.ts";
-import { clock, resolveUntil } from "./when.ts";
+import { clock, MAX_AWAY_MS, resolveUntil } from "./when.ts";
 import { withStore } from "./store.ts";
 import { statusText } from "./tools.ts";
 
@@ -19,6 +19,8 @@ export interface DeliverEnv {
   now(): number;
   /** Default away length; only used by resolveUntil's fallback. */
   hours: number;
+  /** Clock time a weekday "until" lands on (vacation_return_time). */
+  returnTime: string;
   current(): State;
   update(fn: (s: State) => void): State;
   say(text: string, kind?: Kind, code?: string): Promise<void>;
@@ -77,9 +79,11 @@ async function extend(e: DeliverEnv, a: Extract<Action, { kind: "extend" }>): Pr
   const tag = withStore(e.dir, e.now(), (s) => tagFor(e.key, s));
   const now = e.now();
   if (!isAway(e.current(), now)) return e.say(`Away mode already ended for ${tag}.`);
-  const until = "minutes" in a ? e.current().awayUntil + a.minutes * 60_000 : untilToday(a.at, now, e.hours);
+  const until = "minutes" in a ? e.current().awayUntil + a.minutes * 60_000
+    : /^[a-z]/i.test(a.at) ? resolveUntil(a, now, e.hours, e.returnTime) : untilToday(a.at, now, e.hours); // a weekday may be any day ahead
   if (until === null) return e.say(`${(a as { at: string }).at} has already passed today. Try extend 30m or until a later time.`);
   if (!(until > now)) return e.say("Couldn't read that time. Try \"extend 30m\" or \"until 6pm\".");
+  if (until > now + MAX_AWAY_MS) return e.say("Away mode can last at most 30 days.");
   e.update((s) => void (s.awayUntil = until));
   return e.say(`Away until ${clock(until, now)} for ${tag}.`);
 }

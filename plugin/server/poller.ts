@@ -6,6 +6,7 @@ import { tagFor } from "./project.ts";
 import { endAway } from "./recap.ts";
 import type { Action } from "./route.ts";
 import { HELD_BACK_TEXT, looksLikeSecret } from "./sensitive.ts";
+import { permCutoff } from "./state.ts";
 import { type ProjectState, type Store, withStore } from "./store.ts";
 
 export interface PollerDeps {
@@ -27,7 +28,7 @@ export interface PollerDeps {
 /** A copy of the store without permissions past the wait_minutes cutoff, for dispatch only. */
 function live(s: Store, d: PollerDeps, now: number): Store {
   if (d.waitMinutes === undefined) return s;
-  const cutoff = now - d.waitMinutes * 60_000;
+  const cutoff = permCutoff(now, d.waitMinutes);
   const projects = Object.fromEntries(Object.entries(s.projects).map(([k, p]) =>
     [k, { ...p, permissions: p.permissions.filter((x) => x.at > cutoff) }]));
   return { ...s, projects };

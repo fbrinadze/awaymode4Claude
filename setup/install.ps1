@@ -8,8 +8,10 @@
   For a team (as a Teams admin), add the people who should get it:
     powershell -ExecutionPolicy Bypass -File setup\install.ps1 -ForUsers alice@contoso.com,bob@contoso.com
 
-  Optional: -Sessions one (going away in a project hands over from the previous one; default
-  several) and -ReplyRouting on (quoting a bot message in Teams routes to its project; default off).
+  Optional, each written only when you pass it (a re-run leaves your other settings alone):
+  -Sessions one|several (one: going away in a project hands over from the previous one; the
+  plugin default is several), -CheckIns "9:00,18:00" (local times for vacation check-ins; the
+  default is 9:00) and -ReplyRouting on|off (on: quoting a bot message in Teams routes to its project; the default is off).
 
   -Route bot|workflow: bot needs a Teams admin to add the app; workflow (no admin) signs in with
   your own small app registration and posts through a Power Automate Workflow URL you paste in.
@@ -25,10 +27,11 @@ param(
   [string]$Name = "away-mode",
   [string]$ResourceGroup = "away-mode-rg",
   [string]$Location = "eastus",
-  [ValidateSet("several", "one")][string]$Sessions = "several",
-  [ValidateSet("on", "off")][string]$ReplyRouting = "off",
+  [ValidateSet("several", "one")][string]$Sessions,
+  [ValidateSet("on", "off")][string]$ReplyRouting,
   [ValidateSet("bot", "workflow")][string]$Route,
-  [string]$SignInApp
+  [string]$SignInApp,
+  [string]$CheckIns
 )
 $ErrorActionPreference = "Stop"
 $plugin = "away-mode@awaymode"
@@ -92,7 +95,11 @@ if (-not (Test-Native { az account show })) {
 }
 Write-Host "Azure CLI, Bun and Claude Code are ready."
 
-$settings = @{ sessions = $Sessions; reply_routing = $ReplyRouting }
+# Written only when passed, so a re-run never resets what you set under /plugin.
+$settings = @{}
+if ($PSBoundParameters.ContainsKey("Sessions")) { $settings.sessions = $Sessions }
+if ($PSBoundParameters.ContainsKey("ReplyRouting")) { $settings.reply_routing = $ReplyRouting }
+if ($PSBoundParameters.ContainsKey("CheckIns")) { $settings.vacation_checkins = $CheckIns }
 $graphWarning = "Microsoft's Graph tools app may carry more permissions than Away Mode needs in your organisation (anything already approved for it). Use your own app registration if you can."
 if ($Route -eq "workflow") {
   # No admin route: your own app registration (or the Graph tools fallback) plus a workflow URL.

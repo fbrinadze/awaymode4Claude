@@ -2,13 +2,17 @@ import type { Adapter, Kind } from "./adapters/adapter.ts";
 import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
+import { parseCheckins, sendCheckin } from "./checkin.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
+import { inboxLoop } from "./inbox-loop.ts";
+import { isLaptop, keepAwake, type KeepAwake } from "./keepawake.ts";
+import { keepAwakeTick } from "./keepawake-tick.ts";
 import { LEASE_MS } from "./lease.ts";
 import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
 import { createRelay } from "./relay.ts";
 import { redact } from "./sensitive.ts";
-import { isAway, load, tagOf, type State, updateView } from "./state.ts";
+import { isAway, load, permCutoff, tagOf, type State, updateView } from "./state.ts";
 import { type Ctx, makeTools } from "./tools.ts";
 
 export interface Deps {
@@ -20,13 +24,14 @@ export interface Deps {
   key?: string;
   project: string;
   hours: number;
-  waitMinutes: number;
+  waitMinutes: number; returnTime?: string; checkins?: string; // weekday "until" lands here (default "9:00")
   /** Patterns approved only at the terminal (never_relay). */
   neverRelay?: string[];
   /** With no reply after waitMinutes: park the task, or continue safely. */
   endOfDay?: "park" | "safest";
   instance?: string; // this server's instance token (tests inject one)
   sessions?: "several" | "one"; replyRouting?: boolean; // "one" hands over between projects; replyRouting: a quoted reply picks its project
+  keepAwake?: KeepAwake; isLaptop?: () => boolean; // tests inject fakes
   now(): number;
   sleep(ms: number): Promise<void>;
   write(line: string): void;
@@ -47,17 +52,19 @@ export function createAway(d: Deps) {
   let polling = false, lastTick = d.now(), quietUntil = 0;
   const key = d.key ?? "default";
   const instance = d.instance ?? crypto.randomUUID();
+  const times = parseCheckins(d.checkins);
+  const keepTick = keepAwakeTick({ dir: d.dir, instance, now: d.now, ka: d.keepAwake ?? keepAwake(), isLaptop: d.isLaptop ?? (() => isLaptop()), say: (t) => say(t) });
 
   // ponytail: pending permissions expire after wait_minutes because Claude Code never says
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
   function current(): State {
     const s = load(d.dir, key);
-    const cutoff = d.now() - d.waitMinutes * 60_000;
+    const cutoff = permCutoff(d.now(), d.waitMinutes);
     s.permissions = s.permissions.filter((p) => p.at > cutoff);
     return s;
   }
   /** Read, change and write in one locked call, so hooks and other servers can't be clobbered. */
-  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), d.now() - d.waitMinutes * 60_000, fn);
+  const update = (fn: (s: State) => void): State => updateView(d.dir, key, d.now(), permCutoff(d.now(), d.waitMinutes), fn);
   const away = () => isAway(current(), d.now());
   const announce = (name: string, text: string, kind: Kind = "reply", code?: string) => {
     const full = redact(`[${name ? `Claude · ${name}` : "Claude"}] ${text}`);
@@ -78,15 +85,7 @@ export function createAway(d: Deps) {
       .then(() => sweepExpired(poller()))
       .catch(fail("expiry"))
       .finally(() => void (polling = false));
-    // Own short timer (Graph backoff mustn't delay a second project's replies); one last pass after away flips off sends a terminal recap.
-    void (async () => {
-      for (let on = true; on; ) {
-        on = away();
-        if (!on) await sweepExpired(poller()).catch(fail("expiry")); // so the last pass sees its own expiry
-        await drainMine().catch(fail("inbox"));
-        if (on) await d.sleep(MIN_DELAY);
-      }
-    })();
+    void inboxLoop({ away, sweep: () => sweepExpired(poller()), drain: drainMine, sleep: d.sleep, delay: MIN_DELAY, fail });
   }
 
   /** Owner only. Away is re-checked before each item, so nothing is acted on after `back`. */
@@ -99,6 +98,8 @@ export function createAway(d: Deps) {
     lastTick = t;
     if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
+    try { const p = away() ? sendCheckin({ dir: d.dir, key, instance, times, waitMinutes: d.waitMinutes, now: d.now }, (x) => say(x, "checkin")) : null; if (p) await p; }
+    finally { await keepTick(); } // a failed send must not skip it
   }
 
   async function pollOnce(): Promise<number> {
@@ -123,7 +124,7 @@ export function createAway(d: Deps) {
   async function onNotification(method: string, p: Json): Promise<void> { if (method === "notifications/claude/channel/permission_request") await relay.onPermissionRequest(p); }
 
   const act = makeAct({
-    dir: d.dir, key, instance, now: d.now, hours: d.hours, current, update, say, channel, answer,
+    dir: d.dir, key, instance, now: d.now, hours: d.hours, returnTime: d.returnTime ?? "9:00", current, update, say, channel, answer,
     notify: (m, p) => server.notify(m, p), end, room: CAP - `[Claude · ${d.project}] `.length,
   });
 
@@ -133,7 +134,7 @@ export function createAway(d: Deps) {
     endOfDay: d.endOfDay ?? "park",
   });
 
-  const ctx = { deps: d, current, update, say, startPolling, startAway: (until: number) => beginAway(life, tagOf(key), until), endAway: end };
+  const ctx = { deps: d, current, update, say, startPolling, startAway: (until: number, vacation?: boolean) => beginAway(life, tagOf(key), until, vacation), endAway: end };
   const server = createServer(
     { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: [...makeTools(ctx), ...(d.extraTools?.(ctx) ?? [])], onNotification },
     d.write,

@@ -86,6 +86,15 @@ test("installer keeps the bot route on re-run and sets teams_route for bot", () 
   expect(ps).toContain("keeping the bot route");
 });
 
+test("installer writes sessions, reply_routing and vacation_checkins only when passed, and keeps CRLF", () => {
+  const ps = setupText("install.ps1");
+  expect(ps).not.toMatch(/\$Sessions\s*=\s*"/); // no parameter default, so a re-run can't reset it
+  expect(ps).not.toMatch(/\$ReplyRouting\s*=\s*"/);
+  for (const p of ["Sessions", "ReplyRouting", "CheckIns"]) expect(ps).toContain(`$PSBoundParameters.ContainsKey("${p}")`);
+  expect(ps).not.toContain("@{ sessions = $Sessions"); // the old always-written hashtable
+  expect(ps.split("\n").slice(0, -1).every((l) => l.endsWith("\r"))).toBe(true);
+});
+
 test("every setup .ps1 stays within 150 lines, with a stray-backtick-free install.ps1", () => {
   for (const f of ["install.ps1", "install-workflow.ps1", "install-bot.ps1", "create-app.ps1"]) {
     expect(setupText(f).split(/\r?\n/).length - 1).toBeLessThanOrEqual(150);
@@ -106,4 +115,16 @@ test("URL prompt is AsSecureString and never goes on a command line", () => {
   expect(ps).toContain("-AsSecureString");
   expect(ps).toContain("workflow_url");
   expect(ps).not.toMatch(/Write-Host[^\n]*\$workflowUrl/);
+});
+
+test("manifest declares vacation_checkins and vacation_return_time in userConfig and env", () => {
+  const plugin = read(".claude-plugin/plugin.json");
+  expect(plugin.userConfig.vacation_checkins).toMatchObject({ type: "string", default: "9:00" });
+  expect(plugin.userConfig.vacation_return_time).toMatchObject({ type: "string", default: "9:00" });
+  expect(plugin.mcpServers.away.env.AWAY_VACATION_CHECKINS).toBe("${user_config.vacation_checkins}");
+  expect(plugin.mcpServers.away.env.AWAY_VACATION_RETURN_TIME).toBe("${user_config.vacation_return_time}");
+});
+
+test("install.ps1 has -CheckIns", () => {
+  expect(setupText("install.ps1")).toContain("[string]$CheckIns");
 });

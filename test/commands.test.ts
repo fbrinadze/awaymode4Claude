@@ -19,3 +19,14 @@ test("anything else falls through to text", () => {
   for (const t of ["extend soon", "more", "more abcle", "snooze forever", "extend 1h please", "until", "status now"])
     expect(parseCommand(t)).toBeNull();
 });
+
+test("extend 2d parses to 2880 minutes", () => {
+  expect(parseCommand("extend 2d")).toEqual({ kind: "extend", minutes: 2880 });
+  expect(parseCommand("extend 2 days")).toEqual({ kind: "extend", minutes: 2880 });
+  expect(parseCommand("extend 1day")).toEqual({ kind: "extend", minutes: 1440 });
+});
+
+test("until monday parses to at monday", () => {
+  expect(parseCommand("until monday")).toEqual({ kind: "extend", at: "monday" });
+  expect(parseCommand("Until Fri")).toEqual({ kind: "extend", at: "fri" });
+});
