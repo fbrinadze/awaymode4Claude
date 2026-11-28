@@ -26,7 +26,7 @@ test("no project: header is Claude Code", () => {
 test("subtitle per kind", () => {
   const labels: Record<Kind, string> = {
     question: "Question", approval: "Approval needed", done: "Done", error: "Error",
-    update: "Update", recap: "Recap", setup: "Setup", reply: "Reply",
+    update: "Update", recap: "Recap", setup: "Setup", reply: "Reply", checkin: "Check-in",
   };
   for (const [kind, label] of Object.entries(labels)) {
     const sub = body(buildCard("x", { kind: kind as Kind }, "r"))[1]!;

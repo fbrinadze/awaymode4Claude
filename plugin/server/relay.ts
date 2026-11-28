@@ -94,6 +94,7 @@ export function createRelay(r: RelayDeps) {
       const m = items[i]!;
       try {
         await r.say(`${HEADERS[m.type] ?? "Update"}\n${m.text}`, KIND_OF[m.type] ?? "update");
+        if (m.type === "finished") r.update((s) => void (s.vacation && s.vacation.finished++));
       } catch (e) {
         const unsent = items.slice(i);
         r.update((s) => void (s.outbox = [...unsent, ...s.outbox]));

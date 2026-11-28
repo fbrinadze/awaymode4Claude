@@ -1,5 +1,6 @@
 // Vacation check-ins: when one is due, and what it says. Pure; sending is the owner server's job.
 import type { ProjectState } from "./store.ts";
+import { withStore } from "./store.ts";
 import { clock } from "./when.ts";
 
 export interface CheckinTime {
@@ -61,4 +62,17 @@ export function checkinText(p: ProjectState, now: number): string {
     ...(waiting.length ? ["Waiting for you:", ...waiting] : []),
     ...(parked.length ? ["Parked:", ...parked, "Reply with what to do and it goes to Claude."] : []),
   ].join("\n");
+}
+
+/** Owner only, on vacation, when a check-in is due: marks it taken (one catch-up however many were missed) and returns its text. */
+export function takeCheckin(dir: string, key: string, instance: string, times: CheckinTime[], now: number): string | null {
+  return withStore(dir, now, (s) => {
+    const p = s.projects[key];
+    if (!p?.vacation || p.ownerInstance !== instance || p.awayUntil <= now) return null;
+    if (dueCheckin(times, p.vacation.lastCheckinAt, now) === null) return null;
+    const text = checkinText(p, now);
+    p.vacation.lastCheckinAt = now;
+    p.vacation.finished = 0;
+    return text;
+  });
 }

@@ -97,6 +97,7 @@ export function makeTools(c: Ctx): Tool[] {
           return "Held for the user's recap: they snoozed Teams. Questions, approvals and errors still go through.";
         }
         await c.say(`${HEADERS[type]}\n${body}`, KIND_OF[type]);
+        if (type === "finished") c.update((s) => void (s.vacation && s.vacation.finished++)); // counted for the next check-in
       } else throw new Error("type must be finished, error, info or sensitive.");
       sent();
       return "Sent.";

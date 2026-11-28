@@ -2,7 +2,9 @@ import type { Adapter, Kind } from "./adapters/adapter.ts";
 import type { Routed } from "./dispatch.ts";
 import { createServer, type Json, type Tool } from "./mcp.ts";
 import { MIN_DELAY, pollLoop } from "./poll.ts";
+import { parseCheckins, takeCheckin } from "./checkin.ts";
 import { adopt, drainOwned, makeAct } from "./deliver.ts";
+import { inboxLoop } from "./inbox-loop.ts";
 import { LEASE_MS } from "./lease.ts";
 import { pollCycle, sweepExpired } from "./poller.ts";
 import { beginAway, endedAtTerminal, endProject, type EndReason } from "./recap.ts";
@@ -20,7 +22,7 @@ export interface Deps {
   key?: string;
   project: string;
   hours: number;
-  waitMinutes: number; returnTime?: string; // weekday "until" lands here (default "9:00")
+  waitMinutes: number; returnTime?: string; checkins?: string; // weekday "until" lands here (default "9:00")
   /** Patterns approved only at the terminal (never_relay). */
   neverRelay?: string[];
   /** With no reply after waitMinutes: park the task, or continue safely. */
@@ -47,6 +49,7 @@ export function createAway(d: Deps) {
   let polling = false, lastTick = d.now(), quietUntil = 0;
   const key = d.key ?? "default";
   const instance = d.instance ?? crypto.randomUUID();
+  const times = parseCheckins(d.checkins);
 
   // ponytail: pending permissions expire after wait_minutes because Claude Code never says
   // when the terminal answered first. Upgrade if it ever sends a cancel notification.
@@ -78,15 +81,7 @@ export function createAway(d: Deps) {
       .then(() => sweepExpired(poller()))
       .catch(fail("expiry"))
       .finally(() => void (polling = false));
-    // Own short timer (Graph backoff mustn't delay a second project's replies); one last pass after away flips off sends a terminal recap.
-    void (async () => {
-      for (let on = true; on; ) {
-        on = away();
-        if (!on) await sweepExpired(poller()).catch(fail("expiry")); // so the last pass sees its own expiry
-        await drainMine().catch(fail("inbox"));
-        if (on) await d.sleep(MIN_DELAY);
-      }
-    })();
+    void inboxLoop({ away, sweep: () => sweepExpired(poller()), drain: drainMine, sleep: d.sleep, delay: MIN_DELAY, fail });
   }
 
   /** Owner only. Away is re-checked before each item, so nothing is acted on after `back`. */
@@ -99,6 +94,8 @@ export function createAway(d: Deps) {
     lastTick = t;
     if (t >= quietUntil) adopt(d.dir, key, instance, t);
     for (const a of drainOwned(d.dir, key, instance, d.now())) if (away()) await act(a);
+    const text = away() ? takeCheckin(d.dir, key, instance, times, d.now()) : null;
+    if (text) await say(text, "checkin");
   }
 
   async function pollOnce(): Promise<number> {

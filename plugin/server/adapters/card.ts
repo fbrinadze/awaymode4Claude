@@ -3,7 +3,7 @@ import type { Kind, SendMeta } from "./adapter.ts";
 
 const LABELS: Record<Kind, string> = {
   question: "Question", approval: "Approval needed", done: "Done", error: "Error",
-  update: "Update", recap: "Recap", setup: "Setup", reply: "Reply",
+  update: "Update", recap: "Recap", setup: "Setup", reply: "Reply", checkin: "Check-in",
 };
 const PREFIX = /^\[Claude(?: · [^\]]+)?\] /;
 
