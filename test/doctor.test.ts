@@ -102,3 +102,17 @@ test("send_test failure is reported, not thrown", async () => {
   const { d } = deps({ current: () => ({ send: async () => { throw new Error("nope"); }, poll: async () => [], me: async () => "" }) });
   expect((await run(d, { send_test: true })).at(-1)).toStartWith("✘ test message");
 });
+
+test("doctor shows keep awake while on vacation", async () => {
+  const { d, dir } = deps({ keepAwake: { hold() {}, release() {}, held: () => true }, isLaptop: () => true });
+  pair(dir);
+  expect((await run(d)).join("\n")).not.toContain("keep awake");
+  const vac = { version: 2, me: "user-1", cursor: "", nextQ: 1, lease: null, projects: { k: { tag: "p", awayUntil: T + 86_400_000, vacation: { since: T, lastCheckinAt: T, finished: 0 } } } };
+  writeFileSync(join(dir, "state.json"), JSON.stringify(vac), { mode: 0o600 });
+  const on = await run(d);
+  expect(on).toContain("✔ keep awake");
+  expect(on.some((l) => l.includes("lid"))).toBe(true);
+  const off = await run({ ...d, keepAwake: { hold() {}, release() {}, held: () => false }, isLaptop: () => false });
+  expect(off.some((l) => l.startsWith("✘ keep awake"))).toBe(true);
+  expect(off.some((l) => l.includes("lid"))).toBe(false);
+});

@@ -47,7 +47,9 @@
         "AWAY_REPLY_ROUTING": "${user_config.reply_routing}",
         "AWAY_TEAMS_ROUTE": "${user_config.teams_route}",
         "AWAY_WORKFLOW_URL": "${user_config.workflow_url}",
-        "AWAY_SIGN_IN_APP": "${user_config.sign_in_app}"
+        "AWAY_SIGN_IN_APP": "${user_config.sign_in_app}",
+        "AWAY_VACATION_CHECKINS": "${user_config.vacation_checkins}",
+        "AWAY_VACATION_RETURN_TIME": "${user_config.vacation_return_time}"
       }
     }
   },
@@ -101,6 +103,18 @@
       "title": "Terminal-only commands",
       "description": "Comma-separated command patterns that can only be approved at the terminal, never from Teams.",
       "default": "rm -rf,git push --force,deploy"
+    },
+    "vacation_checkins": {
+      "type": "string",
+      "title": "Vacation check-in times",
+      "description": "Comma-separated local times for vacation check-ins, e.g. 9:00,18:00.",
+      "default": "9:00"
+    },
+    "vacation_return_time": {
+      "type": "string",
+      "title": "Vacation return time",
+      "description": "The time of day an \"until <weekday>\" away ends.",
+      "default": "9:00"
     },
     "sessions": {
       "type": "string",

@@ -9,7 +9,7 @@
     powershell -ExecutionPolicy Bypass -File setup\install.ps1 -ForUsers alice@contoso.com,bob@contoso.com
 
   Optional: -Sessions one (going away in a project hands over from the previous one; default
-  several) and -ReplyRouting on (quoting a bot message in Teams routes to its project; default off).
+  several), -CheckIns "9:00,18:00" (local times for vacation check-ins; default 9:00) and -ReplyRouting on (quoting a bot message in Teams routes to its project; default off).
 
   -Route bot|workflow: bot needs a Teams admin to add the app; workflow (no admin) signs in with
   your own small app registration and posts through a Power Automate Workflow URL you paste in.
@@ -28,7 +28,8 @@ param(
   [ValidateSet("several", "one")][string]$Sessions = "several",
   [ValidateSet("on", "off")][string]$ReplyRouting = "off",
   [ValidateSet("bot", "workflow")][string]$Route,
-  [string]$SignInApp
+  [string]$SignInApp,
+  [string]$CheckIns
 )
 $ErrorActionPreference = "Stop"
 $plugin = "away-mode@awaymode"
@@ -93,6 +94,7 @@ if (-not (Test-Native { az account show })) {
 Write-Host "Azure CLI, Bun and Claude Code are ready."
 
 $settings = @{ sessions = $Sessions; reply_routing = $ReplyRouting }
+if ($CheckIns) { $settings.vacation_checkins = $CheckIns }
 $graphWarning = "Microsoft's Graph tools app may carry more permissions than Away Mode needs in your organisation (anything already approved for it). Use your own app registration if you can."
 if ($Route -eq "workflow") {
   # No admin route: your own app registration (or the Graph tools fallback) plus a workflow URL.

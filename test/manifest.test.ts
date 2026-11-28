@@ -107,3 +107,15 @@ test("URL prompt is AsSecureString and never goes on a command line", () => {
   expect(ps).toContain("workflow_url");
   expect(ps).not.toMatch(/Write-Host[^\n]*\$workflowUrl/);
 });
+
+test("manifest declares vacation_checkins and vacation_return_time in userConfig and env", () => {
+  const plugin = read(".claude-plugin/plugin.json");
+  expect(plugin.userConfig.vacation_checkins).toMatchObject({ type: "string", default: "9:00" });
+  expect(plugin.userConfig.vacation_return_time).toMatchObject({ type: "string", default: "9:00" });
+  expect(plugin.mcpServers.away.env.AWAY_VACATION_CHECKINS).toBe("${user_config.vacation_checkins}");
+  expect(plugin.mcpServers.away.env.AWAY_VACATION_RETURN_TIME).toBe("${user_config.vacation_return_time}");
+});
+
+test("install.ps1 has -CheckIns", () => {
+  expect(setupText("install.ps1")).toContain("[string]$CheckIns");
+});

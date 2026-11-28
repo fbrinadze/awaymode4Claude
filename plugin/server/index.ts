@@ -7,6 +7,7 @@ import { installRef, workflowAdapter, type WorkflowConfig } from "./adapters/wor
 import { type AuthConfig, BOT_SCOPES, createAuth } from "./auth.ts";
 import { createAway } from "./away.ts";
 import { doctorTool } from "./doctor.ts";
+import { keepAwake } from "./keepawake.ts";
 import type { Net } from "./http.ts";
 import { baseTag, projectKey } from "./project.ts";
 import { routeConfig } from "./route-config.ts";
@@ -71,11 +72,12 @@ const adapter: Adapter = {
   me: () => current.me(),
 };
 
+const ka = keepAwake(); // one instance, so the doctor reports what the inbox timer holds
 const away = createAway({
   adapter,
   extraTools: (ctx) => [
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a), workflow: wf, route: routeCfg.route }),
-    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current, route: routeCfg.route, workflowUrlSet: !!routeCfg.workflowUrl }),
+    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current, route: routeCfg.route, workflowUrlSet: !!routeCfg.workflowUrl, keepAwake: ka }),
   ],
   dir,
   key: projectKey(projectDir),
@@ -86,6 +88,9 @@ const away = createAway({
   endOfDay: setting(process.env.AWAY_END_OF_DAY_ACTION).toLowerCase() === "safest" ? "safest" : "park",
   sessions: setting(process.env.AWAY_SESSIONS).toLowerCase() === "one" ? "one" : "several",
   replyRouting: setting(process.env.AWAY_REPLY_ROUTING).toLowerCase() === "on",
+  checkins: setting(process.env.AWAY_VACATION_CHECKINS) || undefined,
+  returnTime: setting(process.env.AWAY_VACATION_RETURN_TIME) || undefined,
+  keepAwake: ka,
   now: Date.now,
   sleep: net.sleep,
   write: (line) => void process.stdout.write(line),

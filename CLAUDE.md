@@ -25,7 +25,7 @@ bun run validate                 # claude plugin validate --strict on marketplac
 ## Layout: two manifests, one install boundary
 
 - Repo root is the **`awaymode` marketplace** (`.claude-plugin/marketplace.json`). `plugin/` is the **`away-mode` plugin**, which is the only folder copied to users' machines. Tests, docs, CI and admin scripts (`setup/`) must stay **outside `plugin/`**.
-- `plugin/.claude-plugin/plugin.json` declares the stdio MCP server (`bun ${CLAUDE_PLUGIN_ROOT}/server/index.ts`), the channel, and `userConfig`. User settings reach the server only as `AWAY_*` env vars (`AWAY_TENANT_ID`, `AWAY_BOT_ID`, `AWAY_BOT_SECRET`, `AWAY_HOURS`, `AWAY_WAIT_MINUTES`, `AWAY_END_OF_DAY_ACTION`, `AWAY_NEVER_RELAY`, `AWAY_TEAMS_ROUTE`, `AWAY_WORKFLOW_URL`, `AWAY_SIGN_IN_APP`). If you add a setting, add it in both places.
+- `plugin/.claude-plugin/plugin.json` declares the stdio MCP server (`bun ${CLAUDE_PLUGIN_ROOT}/server/index.ts`), the channel, and `userConfig`. User settings reach the server only as `AWAY_*` env vars (`AWAY_TENANT_ID`, `AWAY_BOT_ID`, `AWAY_BOT_SECRET`, `AWAY_HOURS`, `AWAY_WAIT_MINUTES`, `AWAY_END_OF_DAY_ACTION`, `AWAY_NEVER_RELAY`, `AWAY_TEAMS_ROUTE`, `AWAY_WORKFLOW_URL`, `AWAY_SIGN_IN_APP`, `AWAY_VACATION_CHECKINS`, `AWAY_VACATION_RETURN_TIME`). If you add a setting, add it in both places.
 - Plugin/marketplace names must not start with `claude-` (reserved).
 
 ## Architecture (planned, see `docs/PLAN.md` "Architecture" and "Repository layout")
