@@ -26,6 +26,9 @@ export function resolveUntil(a: Json, now: number, hours: number): number {
   return now + hours * 3_600_000;
 }
 
+/** No away period, vacation or not, lasts longer than 30 days (a typo mustn't keep a PC awake for a year). */
+export const MAX_AWAY_MS = 30 * 24 * 3_600_000;
+
 /** A time people read at a glance: "6:30 PM" today, "Sat 9:00 AM" another day (en-US, local time). */
 export function clock(ms: number, now: number): string {
   const d = new Date(ms);
