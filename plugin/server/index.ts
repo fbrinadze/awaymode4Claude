@@ -73,11 +73,13 @@ const adapter: Adapter = {
 };
 
 const ka = keepAwake(); // one instance, so the doctor reports what the inbox timer holds
+const instance = crypto.randomUUID(); // shared with the doctor, which only reports vacations this server owns
 const away = createAway({
   adapter,
+  instance,
   extraTools: (ctx) => [
     setupTool({ ctx, dir, net, auth, tenantId, botId, current: () => current, use: (a) => (current = a), workflow: wf, route: routeCfg.route }),
-    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current, route: routeCfg.route, workflowUrlSet: !!routeCfg.workflowUrl, keepAwake: ka }),
+    doctorTool({ dir, net, auth, tenantId, botId, hasSecret: !!botSecret, now: Date.now, version, bunVersion: Bun.version, current: () => current, route: routeCfg.route, workflowUrlSet: !!routeCfg.workflowUrl, keepAwake: ka, instance }),
   ],
   dir,
   key: projectKey(projectDir),

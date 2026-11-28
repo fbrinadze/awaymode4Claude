@@ -28,6 +28,8 @@ export interface DoctorDeps {
   workflowUrlSet?: boolean;
   /** The instance holding the PC awake; tests inject fakes. */
   keepAwake?: KeepAwake;
+  /** This server's instance token; only vacations it owns count for keep awake. */
+  instance?: string;
   isLaptop?: () => boolean;
 }
 
@@ -100,7 +102,9 @@ function leaseAndProjects(d: DoctorDeps): string[] {
 /** Only while a project is on vacation: is the PC being held awake, and on a laptop, what closing the lid does. */
 function keepAwakeLines(d: DoctorDeps): string[] {
   const s = readStore(d.dir, d.now());
-  if (!Object.values(s.projects).some((p) => p.vacation && p.awayUntil > d.now())) return [];
+  const vacations = Object.values(s.projects).filter((p) => p.vacation && p.awayUntil > d.now());
+  if (!vacations.length) return [];
+  if (!vacations.some((p) => p.ownerInstance === d.instance)) return ["keep awake: held by another session"]; // its owner holds the PC, not this server
   const out = [line("keep awake", (d.keepAwake ?? keepAwake()).held() ? null : "not held; the PC may sleep and miss check-ins")];
   if ((d.isLaptop ?? (() => isLaptop()))()) out.push("! laptop: closing the lid still sleeps it; set Windows 'when I close the lid' to 'do nothing' for vacation");
   return out;
