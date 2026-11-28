@@ -6,10 +6,11 @@
 ![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-D97757)
 ![Microsoft Teams](https://img.shields.io/badge/Microsoft%20Teams-6264A7?logo=microsoftteams&logoColor=white)
 [![Teams admin: not required](https://img.shields.io/badge/Teams%20admin-not%20required-success)](docs/SETUP.md)
+[![Vacation mode](https://img.shields.io/badge/vacation%20mode-v1.3-8A2BE2)](#vacation-mode)
 
 Step away from your desk and keep your Claude Code session moving. When Claude has a question, needs permission, finishes a task, or gets stuck, it messages you in **Microsoft Teams**. Your reply goes straight back into the session.
 
-> **Status: v1.2.0.** Stable on Windows with Microsoft Teams. It is built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview, so Claude Code needs a launch flag (see [Quick start](#quick-start)). See [CHANGELOG.md](CHANGELOG.md).
+> **Status: v1.3.0.** Stable on Windows with Microsoft Teams. It is built on Claude Code [channels](https://code.claude.com/docs/en/channels), which are a research preview, so Claude Code needs a launch flag (see [Quick start](#quick-start)). See [CHANGELOG.md](CHANGELOG.md).
 
 ```text
 Away Mode                                        1:12 PM
@@ -32,6 +33,7 @@ Away Mode                                        1:20 PM
 - [One-time setup](#one-time-setup)
 - [Using Away Mode](#using-away-mode)
 - [Several projects at once](#several-projects-at-once)
+- [Vacation mode](#vacation-mode)
 - [Teams commands](#teams-commands)
 - [Configuration](#configuration)
 - [Security](#security)
@@ -96,7 +98,7 @@ Away Mode is free and runs on your computer. There is nothing to host.
    - Adds Away Mode to Teams for you. To add colleagues, use `-ForUsers alice@contoso.com,bob@contoso.com`.
    - Installs the plugin and saves its settings. The bot secret goes into your OS keychain and is never shown.
 
-   It is safe to run again. Two options set the [settings](#configuration) up front: `-Sessions one` and `-ReplyRouting on`.
+   It is safe to run again. Three options set the [settings](#configuration) up front: `-Sessions one`, `-ReplyRouting on` and `-CheckIns "9:00,18:00"`.
 
 2. **Open a new terminal and start Claude Code with the channel on:**
 
@@ -140,7 +142,7 @@ This does not remove the launch flag. **Individual users still need to start Cla
 
 | Command | What it does |
 | --- | --- |
-| `/away-mode:away [1h \| until 5pm]` | Turns away mode on. The default length is 9 hours |
+| `/away-mode:away [1h \| until 5pm]` | Turns away mode on. The default length is 9 hours. For days, see [Vacation mode](#vacation-mode) |
 | `/away-mode:back` | Turns it off and lists anything you missed |
 | `/away-mode:status` | Shows whether you're away and what is waiting |
 | `/away-mode:setup` | Signs in, pairs, or re-pairs |
@@ -197,6 +199,23 @@ More examples with `order-portal` and a second project away:
 
 **One at a time.** If you prefer only one project away at once, set `sessions` to `one`. Going away in a project then ends the previous one, and Teams says so.
 
+## Vacation mode
+
+For days away, not hours. Say it in plain words: *"on vacation until Monday"*, *"away for a week"* or *"off for 5 days"*. Claude turns away mode on with a vacation end time. Everything in [Using Away Mode](#using-away-mode) still works: questions, approvals, notes and errors reach Teams, and your replies go back to the session.
+
+What vacation adds:
+
+- **Check-ins.** At the times in `vacation_checkins` (default `9:00`), the bot sends a Check-in card. It starts with `On vacation until <time>`. Then it lists what is waiting for you (approvals with their `yes <id>` / `no <id>` reply, and open questions, each with how many hours they have waited), any parked items, and how many tasks finished since the last check-in. If nothing needs you, it says `Still working. Nothing needs you.` Several times are comma-separated, for example `9:00,18:00` (`9am` and `6pm` also work). Entries it can't read are ignored, and if none are readable it uses `9:00`. After a long sleep you get one catch-up check-in, not one per missed time.
+- **Approvals.** An approval waiting at a check-in can be answered from Teams as usual, with `yes <id>`. An unanswered approval follows `wait_minutes` and `end_of_day_action` like in any away period, so a long wait can cancel it. The check-in lists what is waiting at that moment.
+- **Day-sized times.** `extend 2d` adds two days, and `until monday` sets the end to the next Monday (never today) at `vacation_return_time` (default `9:00`). See [Teams commands](#teams-commands).
+- **Your PC stays awake.** While a project is on vacation, Away Mode asks the computer not to go to sleep (the screen may still turn off). It lets go as soon as the last vacation ends: `back`, time up, or typing at the terminal.
+- **Laptops.** The computer sleeps when you close the lid unless you change that. When Away Mode finds a battery, Teams gets one note when vacation starts: *On a laptop: keep the lid open, or set 'When I close the lid: Do nothing' while plugged in.* `/away-mode:doctor` shows a `keep awake` line while a vacation is running, and repeats the lid warning on a laptop.
+- **A 30-day ceiling.** No away period, vacation or not, can last longer than 30 days. A longer request is refused with "Away mode can last at most 30 days.", so a typo can't keep a PC awake for a year.
+
+**A missed check-in means the PC or Claude Code stopped.** Check-ins come from the session on your computer. If one doesn't arrive, the PC went to sleep or off, lost its network, or Claude Code was closed. Away Mode can't send a "last gasp" from a machine that has stopped.
+
+To end vacation early, reply `back`, run `/away-mode:back`, or type in the terminal. As with any away period, Teams gets a recap.
+
 ## Teams commands
 
 Send these in the Away Mode chat. They must match exactly. Anything else counts as plain text. Start with `@project` to aim a command at one project.
@@ -208,7 +227,9 @@ Send these in the Away Mode chat. They must match exactly. Anything else counts 
 | `status` | Shows whether you're away and what is waiting |
 | `back` | Ends away mode from your phone |
 | `extend 1h` | Adds time. Use `m` or `h`, for example `extend 30m` |
+| `extend 2d` | Adds whole days, for example `extend 2d` or `extend 3 days`. Up to 30 days in total |
 | `until 6pm` | Sets the end time, for example `until 6pm` or `until 18:30` |
+| `until monday` | Sets the end to the next Monday (or any weekday name, full or three letters, like `fri`) at `vacation_return_time`. Never today |
 | `snooze 30m` | Holds back "finished" and info notes for 30 minutes. Questions, approvals and errors still arrive. Held notes appear in the recap |
 | `snooze until 3pm` | Same, until the clock shows 3pm |
 | `unsnooze` | Ends the snooze |
@@ -218,7 +239,7 @@ Send these in the Away Mode chat. They must match exactly. Anything else counts 
 
 ## Configuration
 
-Change these under `/plugin` → Away Mode. The installer sets `sessions` and `reply_routing` for you.
+Change these under `/plugin` → Away Mode. The installer sets `sessions`, `reply_routing` and `vacation_checkins` for you.
 
 | Setting | Default | Description |
 | --- | --- | --- |
@@ -226,6 +247,8 @@ Change these under `/plugin` → Away Mode. The installer sets `sessions` and `r
 | `wait_minutes` | `60` | How long to wait for a reply before `end_of_day_action` applies (5 to 720) |
 | `end_of_day_action` | `park` | With no reply after `wait_minutes`: `park` pauses the task, `safest` continues with the safest option and tells you |
 | `never_relay` | `rm -rf`, `git push --force`, `deploy` | Commands that can only be approved at the terminal. Teams tells you one is waiting but can't approve it |
+| `vacation_checkins` | `9:00` | Local times for vacation check-ins, comma-separated, for example `9:00,18:00` |
+| `vacation_return_time` | `9:00` | The time of day an `until <weekday>` away ends |
 | `sessions` | `several` | `several`: each project can be away at once. `one`: going away in a project ends the previous one |
 | `reply_routing` | `off` | `on`: quoting a bot message sends your reply to that message's project. `off`: use `@project` |
 | `teams_route` | `bot` | `bot`: the Away Mode Teams app (needs a Teams admin). `workflow`: a Power Automate flow (no admin) |
@@ -267,10 +290,10 @@ Start with `/away-mode:doctor`. It checks Bun, the plugin, your settings, sign-i
 - [x] v1.1: Teams commands `extend`, `until`, `snooze`, `more`, a recap when away mode ends, and `/away-mode:doctor`
 - [x] v1.2: no Teams admin needed (the workflow route: a Power Automate flow sends, your own app reads replies)
 - [x] v1.2: cards that say Claude Code and which project each message is from
+- [x] v1.3: vacation mode (away for days, check-ins, the PC kept awake)
 
 Next:
 
-- [ ] Vacation mode: away for days, not hours
 - [ ] Listing in Anthropic's plugin directory (submit the prepared plugin)
 - [ ] Browser sign-in, for organisations that block device-code sign-in
 - [ ] One-command installer for macOS and Linux (setup there is manual today)

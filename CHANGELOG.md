@@ -2,6 +2,23 @@
 
 All notable changes are listed here. Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [1.3.0] - 2026-11-27
+
+### Added
+- **Vacation mode: away for days, not hours.** Say "on vacation until Monday" or "away for a week". Away Mode keeps relaying as before and adds the features below.
+- **Check-ins.** At the times in `vacation_checkins` (default `9:00`) a Check-in card lists what is waiting for you (approvals with their `yes <id>` reply, open questions), parked items and how many tasks finished since the last one, or says "Still working. Nothing needs you." After a long sleep you get one catch-up check-in.
+- **Day-sized times.** `extend 2d` and `until monday` (any weekday name, ending at `vacation_return_time`, default `9:00`) in Teams.
+- **The PC stays awake** while a project is on vacation (Windows, macOS and Linux), and is released when the last vacation ends. On a laptop, Teams gets one note about the lid.
+- **`/away-mode:doctor`** shows a `keep awake` line during vacation, with a lid warning on laptops.
+- **Settings:** `vacation_checkins` and `vacation_return_time`. The installer takes `-CheckIns`.
+
+### Changed
+- No away period, vacation or not, can last longer than 30 days. Longer requests are refused with "Away mode can last at most 30 days."
+
+### Known
+- Approvals don't yet wait for the whole trip: an unanswered approval still follows `wait_minutes` and `end_of_day_action`. The check-in lists what is waiting.
+- A missed check-in means the PC or Claude Code stopped (sleep, power, network, or a closed session).
+
 ## [1.2.0] - 2026-11-27
 
 ### Added
