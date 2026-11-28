@@ -3,7 +3,7 @@ import type { Json, Tool } from "./mcp.ts";
 import type { EndReason } from "./recap.ts";
 import { asksForSecret, SENSITIVE_TEXT } from "./sensitive.ts";
 import { isAway, type State } from "./state.ts";
-import { clock, resolveUntil } from "./when.ts";
+import { clock, MAX_AWAY_MS, resolveUntil } from "./when.ts";
 
 export interface Ctx {
   deps: { hours: number; now(): number };
@@ -12,7 +12,7 @@ export interface Ctx {
   say(text: string, kind?: Kind): Promise<void>;
   startPolling(): void;
   /** A clean new away period (clears pending items, takes delivery ownership). */
-  startAway(until: number): string[];
+  startAway(until: number, vacation?: boolean): string[];
   /** End away mode and return the recap text. */
   endAway(reason: EndReason): string;
 }
@@ -34,7 +34,7 @@ const obj = (properties: Json, required: string[]): Json => ({ type: "object", p
 
 /** Away state, open questions and pending approvals, for `status` in Teams and the status tool. */
 export function statusText(s: State, now: number): string {
-  const until = isAway(s, now) ? `Away until ${clock(s.awayUntil, now)}` : "Not away";
+  const until = !isAway(s, now) ? "Not away" : `${s.vacation ? "On vacation" : "Away"} until ${clock(s.awayUntil, now)}`;
   const qs = s.questions.map((q) => `\n${q.id}: ${q.text}`).join("");
   return `${until}. ${s.questions.length} open question(s), ${s.permissions.length} pending approval(s).${qs}`;
 }
@@ -113,9 +113,9 @@ export function makeTools(c: Ctx): Tool[] {
   const setAway: Tool = {
     name: "set_away",
     description:
-      'Turn Away Mode on or off. Call it with on=true when the user says they\'re stepping away, going to lunch, in a meeting, heading home or done for the day. Say how long with ONE of: minutes ("for 30 minutes" = 30), at as the local clock time they gave ("back at 1:30" = "1:30", "until 5pm" = "5pm"), or until as an exact ISO time. The server uses its own clock, so don\'t work out the date yourself. Leave all three out for the default length. Call it with on=false when they say they\'re back.',
+      'Turn Away Mode on or off. Call it with on=true when the user says they\'re stepping away, going to lunch, in a meeting, heading home or done for the day. Say how long with ONE of: minutes ("for 30 minutes" = 30), at as the local clock time they gave ("back at 1:30" = "1:30", "until 5pm" = "5pm"), or until as an exact ISO time. The server uses its own clock, so don\'t work out the date yourself. For a trip or days off ("on vacation", "off until Monday", "away for a week") pass vacation=true with days (a number) or at. Leave them out for the default length. Call it with on=false when they say they\'re back.',
     inputSchema: obj(
-      { on: { type: "boolean" }, minutes: { type: "number" }, at: { type: "string" }, until: { type: "string" } },
+      { on: { type: "boolean" }, minutes: { type: "number" }, at: { type: "string" }, until: { type: "string" }, vacation: { type: "boolean" }, days: { type: "number" } },
       ["on"],
     ),
     async run(a) {
@@ -126,11 +126,13 @@ export function makeTools(c: Ctx): Tool[] {
         if (wasAway) await c.say(recap, "recap");
         return "Away mode off.";
       }
-      const until = resolveUntil(a, now, c.deps.hours);
+      const days = typeof a.days === "number" && a.days > 0 ? a.days : 0;
+      const until = days ? now + days * 86_400_000 : resolveUntil(a, now, c.deps.hours);
+      if (until > now + MAX_AWAY_MS) throw new Error("Away mode can last at most 30 days.");
       if (!(until > now)) {
         throw new Error(`Couldn't work out a future end time. It is now ${new Date(now).toString()}. Pass minutes, at (like "1:30" or "5pm"), or a future ISO until.`);
       }
-      for (const note of c.startAway(until)) await c.say(note, "recap"); // awayStartedAt lets the Stop hook end this turn without a "finished" note
+      for (const note of c.startAway(until, a.vacation === true)) await c.say(note, "recap"); // awayStartedAt lets the Stop hook end this turn without a "finished" note
       c.startPolling();
       return `Away mode on until ${new Date(until).toString()}. Tell the user (in their local time) that you'll message them on Teams.`;
     },

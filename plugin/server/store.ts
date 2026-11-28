@@ -33,6 +33,8 @@ export interface ProjectState {
   lastStopAt: number;
   /** Ended by expiry or handover elsewhere: the owner still has to tell its Claude (ownerInstance is kept until then). */
   ended?: "expired" | "handover";
+  /** Present = on vacation (away for days): when it began, the last check-in sent, and tasks finished since. */
+  vacation?: { since: number; lastCheckinAt: number; finished: number };
 }
 export interface Store {
   version: 2;
@@ -60,6 +62,11 @@ const arr = <T>(v: unknown, ok: (x: Obj) => boolean = () => true): T[] =>
   Array.isArray(v) ? (v.filter((x) => isObj(x) && ok(x)) as T[]) : [];
 const hasId = (x: Obj) => typeof x.id === "string";
 
+function vacation(v: unknown): ProjectState["vacation"] {
+  if (!isObj(v) || [v.since, v.lastCheckinAt, v.finished].some((n) => typeof n !== "number" || !Number.isFinite(n))) return undefined;
+  return { since: num(v.since), lastCheckinAt: num(v.lastCheckinAt), finished: num(v.finished) };
+}
+
 function project(v: unknown): ProjectState {
   const p = isObj(v) ? v : {};
   return {
@@ -67,7 +74,7 @@ function project(v: unknown): ProjectState {
     awayUntil: num(p.awayUntil), awayStartedAt: num(p.awayStartedAt), snoozeUntil: num(p.snoozeUntil),
     questions: arr(p.questions, hasId), permissions: arr(p.permissions, hasId), outbox: arr(p.outbox),
     recap: arr(p.recap), inbox: arr(p.inbox), lastSentAt: num(p.lastSentAt), lastStopAt: num(p.lastStopAt),
-    ended: p.ended === "expired" || p.ended === "handover" ? p.ended : undefined,
+    ended: p.ended === "expired" || p.ended === "handover" ? p.ended : undefined, vacation: vacation(p.vacation),
   };
 }
 

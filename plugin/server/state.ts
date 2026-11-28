@@ -45,6 +45,7 @@ export interface State {
   /** Epoch ms until which finished/info notes are held for the recap; 0 = not snoozed. */
   snoozeUntil: number;
   recap: RecapItem[];
+  vacation?: ProjectState["vacation"];
 }
 
 export const fresh = (): State => ({
@@ -77,7 +78,7 @@ const viewOf = (s: Store, p: ProjectState): State => ({
   awayUntil: p.awayUntil, me: s.me, cursor: s.cursor, nextQ: s.nextQ, questions: p.questions,
   permissions: p.permissions, lastSentAt: p.lastSentAt, lastStopAt: p.lastStopAt,
   awayStartedAt: p.awayStartedAt, awaySession: p.sessionId, outbox: p.outbox,
-  snoozeUntil: p.snoozeUntil, recap: p.recap,
+  snoozeUntil: p.snoozeUntil, recap: p.recap, vacation: p.vacation,
 });
 
 /** Write a project's view into the (locked) store. */

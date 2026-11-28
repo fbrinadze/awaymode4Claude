@@ -20,18 +20,19 @@ export function endAway(p: ProjectState, reason: EndReason): string {
     ...bullets("Parked", texts(p, "parked")),
   ].join("\n");
   const tell = (reason === "expired" || reason === "handover") && !!p.ownerInstance;
-  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], sessionId: undefined, awayUntil: 0, snoozeUntil: 0 });
+  Object.assign(p, { permissions: [], questions: [], inbox: [], recap: [], sessionId: undefined, vacation: undefined, awayUntil: 0, snoozeUntil: 0 });
   Object.assign(p, tell ? { ended: reason } : { ownerInstance: undefined, ended: undefined });
   return text;
 }
 
 /** A new away period: earlier replies and pending items aren't for it. The cursor moves only if no other project is away. */
-export function startAway(s: Store, key: string, until: number, now: number, instance: string): void {
+export function startAway(s: Store, key: string, until: number, now: number, instance: string, vacation?: boolean): void {
   const p = s.projects[key];
   if (!p) throw new Error(`No project ${key}.`);
   const othersAway = Object.entries(s.projects).some(([k, o]) => k !== key && o.awayUntil > now);
   if (!othersAway) s.cursor = new Date(now).toISOString();
   Object.assign(p, { permissions: [], questions: [], inbox: [], awayUntil: until, awayStartedAt: now, ownerInstance: instance, ownerSeen: now, ended: undefined });
+  if (vacation) p.vacation = { since: now, lastCheckinAt: now, finished: 0 };
 }
 
 export interface Life {
@@ -46,7 +47,7 @@ export interface Life {
 }
 
 /** set_away on for this server's project. Extending an away period keeps its pending items and cursor. Returns the handover notes to send. */
-export function beginAway(l: Life, tag: string, until: number): string[] {
+export function beginAway(l: Life, tag: string, until: number, vacation?: boolean): string[] {
   const now = l.now();
   return withStore(l.dir, now, (s) => {
     const notes: string[] = [];
@@ -56,8 +57,10 @@ export function beginAway(l: Life, tag: string, until: number): string[] {
       }
     }
     const p = (s.projects[l.key] ??= freshProject(tag));
-    if (p.awayUntil > now) Object.assign(p, { awayUntil: until, ownerInstance: l.instance, ownerSeen: now });
-    else startAway(s, l.key, until, now, l.instance);
+    if (p.awayUntil > now) {
+      Object.assign(p, { awayUntil: until, ownerInstance: l.instance, ownerSeen: now });
+      if (vacation) p.vacation ??= { since: now, lastCheckinAt: now, finished: 0 };
+    } else startAway(s, l.key, until, now, l.instance, vacation);
     return notes;
   });
 }

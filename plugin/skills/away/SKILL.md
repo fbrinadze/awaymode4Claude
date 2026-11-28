@@ -8,6 +8,7 @@ description: Turn on Away Mode so Claude's questions, permission requests and fi
 1. Call the Away Mode `set_away` tool with `on: true` and how long they'll be gone, exactly as they said it. Don't work out the date or time yourself: you don't know the current time, but the server does.
    - "for 30 minutes", "an hour", "/away-mode:away 1h": `minutes` (30, 60).
    - "back at 1:30", "until 5pm": `at` ("1:30", "5pm"). The server picks the next time the clock shows it.
+   - "on vacation", "off until Monday", "away for a week": `vacation: true` with `days` (7) or `at` ("monday"). Days-long away mode, capped at 30 days.
    - Nothing said: leave them out, and the default length applies.
 2. Confirm in one line using the end time the tool returns: "Away mode on until 1:30 PM. I'll message you on Teams."
 

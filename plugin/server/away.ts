@@ -133,7 +133,7 @@ export function createAway(d: Deps) {
     endOfDay: d.endOfDay ?? "park",
   });
 
-  const ctx = { deps: d, current, update, say, startPolling, startAway: (until: number) => beginAway(life, tagOf(key), until), endAway: end };
+  const ctx = { deps: d, current, update, say, startPolling, startAway: (until: number, vacation?: boolean) => beginAway(life, tagOf(key), until, vacation), endAway: end };
   const server = createServer(
     { name: "away-mode", version: "0.1.0", instructions: INSTRUCTIONS, tools: [...makeTools(ctx), ...(d.extraTools?.(ctx) ?? [])], onNotification },
     d.write,
