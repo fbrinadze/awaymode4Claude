@@ -1,10 +1,12 @@
 // v1.3.0 review fixes. Fake adapter and fake keep-awake only: no real Teams or power calls.
 import { afterEach, expect, test } from "bun:test";
+import type { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createAway, type Deps } from "../plugin/server/away.ts";
-import type { KeepAwake } from "../plugin/server/keepawake.ts";
+import { type KeepAwake, keepAwake } from "../plugin/server/keepawake.ts";
 import type { Json } from "../plugin/server/mcp.ts";
 import { projectKey } from "../plugin/server/project.ts";
 import { withStore } from "../plugin/server/store.ts";
@@ -133,6 +135,37 @@ test("laptops keep the screen on, desktops let it turn off", async () => {
     await x.away.pollOnce();
     expect(ka.holds).toEqual([laptop]);
   }
+});
+
+test("the Windows keep-awake touches nothing until the first hold", () => {
+  const before = process.listenerCount("exit");
+  const k = keepAwake("win32"); // never held here, so no ffi load and no exit listener
+  k.release();
+  expect([k.held(), process.listenerCount("exit")]).toEqual([false, before]);
+});
+
+/** A spawn that records calls and returns a live fake child. */
+function fakeSpawn() {
+  const calls: { cmd: string; args: string[] }[] = [];
+  let n = 1000;
+  const run = ((cmd: string, args: string[]) => {
+    calls.push({ cmd, args });
+    return Object.assign(new EventEmitter(), { pid: ++n, kill() { return true; } });
+  }) as unknown as typeof spawn;
+  return { run, calls };
+}
+
+test("Linux inhibitor ends by itself when the server dies, and the exit listener is added once", () => {
+  const before = process.listenerCount("exit");
+  const { run, calls } = fakeSpawn();
+  const k = keepAwake("linux", run);
+  for (let i = 0; i < 3; i++) { k.hold(false); k.release(); }
+  expect(calls).toHaveLength(3);
+  expect(calls[0]!.cmd).toBe("systemd-inhibit");
+  expect(calls[0]!.args.join(" ")).toContain(`while kill -0 ${process.pid} 2>/dev/null; do sleep 30; done`);
+  expect(calls[0]!.args).not.toContain("infinity");
+  expect(process.listenerCount("exit")).toBe(before + 1);
+  k.release(); // not held: harmless
 });
 
 test("keep-awake still ticks when the check-in send fails", async () => {
